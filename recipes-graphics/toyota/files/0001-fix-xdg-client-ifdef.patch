@@ -1,0 +1,22 @@
+From dd86875e3cabc969eb4943b5281287227202a49e Mon Sep 17 00:00:00 2001
+From: tomasz-karczewski-red <tomasz.karczewski@redembedded.com>
+Date: Thu, 14 May 2026 13:09:10 +0200
+
+properly handle ENABLE_XDG_CLIENT ifdef
+
+diff --git a/shell/wayland/window.cc b/shell/wayland/window.cc
+index dc1b0ae3..0f1f32d3 100644
+--- a/shell/wayland/window.cc
++++ b/shell/wayland/window.cc
+@@ -71,7 +71,7 @@ WaylandWindow::WaylandWindow(const size_t index,
+ 
+     m_wait_for_configure = false;
+   }
+-#elif defined(ENABLE_XDG_CLIENT)
++#elif ENABLE_XDG_CLIENT
+   {
+     m_xdg_surface =
+         xdg_wm_base_get_xdg_surface(m_display->GetXdgWmBase(), m_base_surface);
+-- 
+2.43.0
+

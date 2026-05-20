@@ -1,0 +1,15 @@
+partial backport of bd20d4db, to be able to compile without XDG_CLIENT
+
+diff --git a/include/waypp/window/window.h b/include/waypp/window/window.h
+index d1c2def..79c8fb6 100644
+--- a/include/waypp/window/window.h
++++ b/include/waypp/window/window.h
+@@ -26,7 +26,7 @@
+ #include "egl.h"
+ #include "feedback.h"
+ #include "waypp/window/buffer.h"
+-#include "waypp/window_manager/xdg_window_manager.h"
++#include "waypp/window_manager/window_manager.h"
+ 
+ class Buffer;
+ 
