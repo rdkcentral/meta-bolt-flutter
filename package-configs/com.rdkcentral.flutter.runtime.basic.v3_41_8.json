@@ -1,0 +1,16 @@
+{
+  "id": "com.rdkcentral.flutter.runtime.basic.v3_41_8",
+  "version": "0.0.1",
+  "versionName": "develop",
+  "name": "BasicFlutterRuntimev3_41_8",
+  "packageType": "runtime",
+  "entryPoint": "/usr/bin/flutter-launcher-wayland",
+  "dependencies": {
+    "com.rdkcentral.base": "0.1.0"
+  },
+  "permissions": [
+  ],
+  "configuration": {
+  }
+}
+

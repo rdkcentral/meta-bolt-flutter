@@ -22,7 +22,7 @@ source setup-environment
 
 * Start building the flutter-runtime  image.
 ```
-bitbake flutter-auto-3-38-3-runtime-bolt-image
+bitbake flutter-auto-3-41-8-runtime-bolt-image
 ```
 ## Building flutter-runtime as bolt package! 
 
@@ -32,7 +32,7 @@ To create Bolt packages for Flutter, ensure that the base package is available i
 Follow the same steps mentioned in the [Cobalt OCI image building instructions](#cobalt-oci-image-building-instructions) chapter to setup and build the Cobalt runtime, but instead of calling `bitbake cobalt-bolt-image`, use the [bolt tool](https://github.com/rdkcentral/bolt-tools/tree/main/bolt) to create bolt packages for Cobalt.
 
 ```
-bolt make flutter.runtime.flutter-auto.v3_38_3 --install
+bolt make flutter.runtime.flutter-auto.v3_41_8 --install
 
 ```
 ## Building flutter-application as bolt package! 
@@ -55,7 +55,7 @@ bolt push <sshuser@remoteip> <boltpackagename>
 bolt run <sshuser@remoteip> <boltpackagename>
 
 bolt push <sshuser@remoteip> com.rdkcentral.base+0.2.0
-bolt push <sshuser@remoteip> com.rdkcentral.flutter.runtime.flutter-auto.v3_38_3+0.0.1
+bolt push <sshuser@remoteip> com.rdkcentral.flutter.runtime.flutter-auto.v3_41_8+0.0.1
 bolt push <sshuser@remoteip> com.rdkcentral.flutter.app.wonderous+0.1.0
 
 bolt run <sshuser@remoteip> com.rdkcentral.flutter.app.wonderous+0.1.0

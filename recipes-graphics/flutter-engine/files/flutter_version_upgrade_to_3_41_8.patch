@@ -1,0 +1,83 @@
+diff --git a/conf/include/dart-revision.json b/conf/include/dart-revision.json
+index 6095da0a..973848ad 100644
+--- a/conf/include/dart-revision.json
++++ b/conf/include/dart-revision.json
+@@ -212,6 +212,7 @@
+   "3.4.0-17.1.pre": "2.19.0 (build 2.19.0-146.1.beta)",
+   "3.4.0-17.2.pre": "2.19.0 (build 2.19.0-146.2.beta)",
+   "3.4.0-34.1.pre": "2.19.0 (build 2.19.0-255.2.beta)",
++  "3.41.8": "3.11.5",
+   "3.6.0-0.1.pre": "2.19.0 (build 2.19.0-374.1.beta)",
+   "3.7.0": "2.19.0",
+   "3.7.0-1.1.pre": "2.19.0 (build 2.19.0-444.1.beta)",
+@@ -234,4 +235,4 @@
+   "3.8.0-10.1.pre": "3.0.0 (build 3.0.0-218.1.beta)",
+   "3.9.0-0.1.pre": "3.0.0 (build 3.0.0-290.1.beta)",
+   "3.9.0-0.2.pre": "3.0.0 (build 3.0.0-290.3.beta)"
+-}
+\ No newline at end of file
++}
+diff --git a/conf/include/engine-revision.json b/conf/include/engine-revision.json
+index 7b02c803..4c67b2c7 100644
+--- a/conf/include/engine-revision.json
++++ b/conf/include/engine-revision.json
+@@ -336,6 +336,7 @@
+   "3.4.0-17.1.pre": "9b2472da99dd27fd1cd817ae47cd2e3328d1049b",
+   "3.4.0-17.2.pre": "3950c6140a3f1cb295364b0446627bd3a1736915",
+   "3.4.0-34.1.pre": "db0cbb2145c227cdac34b7a6a866e274f06e6e12",
++  "3.41.8": "59aa584fdf100e6c78c785d8a5b565d1de4b48ab",
+   "3.6.0-0.1.pre": "b754eabc98fb5dc75d90b8b5fca440ce8aac4c44",
+   "3.7.0": "b24591ed328a2d4ce6505819e2f5898a78132f7f",
+   "3.7.0-1.1.pre": "4971c5b2e7e66cb7abc858b4e0203ce7d39f6ff1",
+@@ -615,4 +616,4 @@
+   "v1.9.5": "72283b64196cb5df16eb4d1a782da08f320a8014",
+   "v1.9.6": "f8c4546eb44556ea40efdf4b108cb11477266a5e",
+   "v1.9.7": "f52c0b9270de3b2fc3e2785dfa7355e70a0b5fc7"
+-}
+\ No newline at end of file
++}
+diff --git a/conf/include/flutter-version.inc b/conf/include/flutter-version.inc
+index 7a244f02..a962b860 100644
+--- a/conf/include/flutter-version.inc
++++ b/conf/include/flutter-version.inc
+@@ -2,7 +2,7 @@
+ # Copyright (c) 2020-2024 Joel Winarske. All rights reserved.
+ #
+ 
+-FLUTTER_SDK_TAG ??= "3.38.3"
++FLUTTER_SDK_TAG ??= "3.41.8"
+ 
+ def get_flutter_archive(d):
+     return _get_flutter_release_info(d, "archive")
+diff --git a/conf/include/releases_linux.json b/conf/include/releases_linux.json
+index d562a0f7..19d6d1ab 100644
+--- a/conf/include/releases_linux.json
++++ b/conf/include/releases_linux.json
+@@ -3,9 +3,19 @@
+   "current_release": {
+     "beta": "cbb46938eea8d29b761fbfd14b4554f10c9fd825",
+     "dev": "13a2fb10b838971ce211230f8ffdd094c14af02c",
+-    "stable": "19074d12f7eaf6a8180cd4036a430c1d76de904e"
++    "stable": "02085feb3f5d8a8156e5e28512b9d99351d510c0"
+   },
+   "releases": [
++    {
++      "hash": "02085feb3f5d8a8156e5e28512b9d99351d510c0",
++      "channel": "stable",
++      "version": "3.41.8",
++      "dart_sdk_version": "3.11.5",
++      "dart_sdk_arch": "x64",
++      "release_date": "2026-04-27T17:43:19.743865Z",
++      "archive": "stable/linux/flutter_linux_3.41.8-stable.tar.xz",
++      "sha256": "0c7e47fc39ef86290b41707d687bdca7f82b277267a6ef74717f8e88ac423de1"
++    },
+     {
+       "hash": "19074d12f7eaf6a8180cd4036a430c1d76de904e",
+       "channel": "stable",
+@@ -5911,4 +5921,4 @@
+       "sha256": "5dd34873b3a3e214a32fd30c2c319a0f46e608afb72f0d450b2d621a6d02aebd"
+     }
+   ]
+-}
+\ No newline at end of file
++}

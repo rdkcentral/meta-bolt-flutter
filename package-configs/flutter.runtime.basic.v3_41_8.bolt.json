@@ -1,0 +1,7 @@
+{
+  "config": "com.rdkcentral.flutter.runtime.basic.v3_41_8.json",
+  "bitbake": {
+    "image": "flutter-3-41-8-basic-runtime-bolt-image"
+  }
+}
+

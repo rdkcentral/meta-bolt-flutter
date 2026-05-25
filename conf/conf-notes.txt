@@ -1,8 +1,8 @@
 Example targets:
-  bitbake flutter-auto-3-38-3-runtime-bolt-image        # no multi config 
+  bitbake flutter-auto-3-41-8-runtime-bolt-image        # no multi config 
 
-  bitbake mc:arm:flutter-auto-3-38-3-runtime-bolt-image  \
-  bitbake mc:arm64:flutter-auto-3-38-3-runtime-bolt-image  \ 
-  bitbake mc:amd64:flutter-auto-3-38-3-runtime-bolt-image  # requires multi config
+  bitbake mc:arm:flutter-auto-3-41-8-runtime-bolt-image  \
+  bitbake mc:arm64:flutter-auto-3-41-8-runtime-bolt-image  \ 
+  bitbake mc:amd64:flutter-auto-3-41-8-runtime-bolt-image  # requires multi config
 
 

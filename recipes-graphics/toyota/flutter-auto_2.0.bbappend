@@ -53,6 +53,13 @@ PACKAGECONFIG = "\
     simple-shell \
     disable-plugins \
 "
+PACKAGECONFIG:append = " \
+    egl-3d \
+    egl-transparency \
+    egl-multisample \
+    backend-wayland-drm \
+"
+
 EXTRA_OECMAKE += "\
     -DBUILD_IVI_HOME_SCREEN_PLUGINS=OFF \
     -DBUILD_PLUGINS=OFF \
