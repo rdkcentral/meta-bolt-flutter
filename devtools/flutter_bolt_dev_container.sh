@@ -1,5 +1,5 @@
 #!/bin/bash
-
+debug="echo [DEBUG]"
 # Resolve the canonical, absolute path of the script itself
 SCRIPT_PATH=$(readlink -f "$0")
 
@@ -19,11 +19,10 @@ run_in_tmux() {
     docker exec --user flutter-dev "$CONTAINER_NAME" bash -c 'rm -f /tmp/cmd.out /tmp/cmd.exit'
     
     # 2. Send the command.
-    #docker exec --user flutter-dev "$CONTAINER_NAME" tmux send-keys -t dev " ${cmd} > /tmp/cmd.out 2>&1; echo \$? > /tmp/cmd.exit" ENTER
-    full_command=" ${cmd} > /tmp/cmd.out 2>&1; echo \$? > /tmp/cmd.exit"
-    echo "Running in container: ${full_command}"
+    full_command=" ( ${cmd} > /tmp/cmd.out 2>&1 ) ; echo \$? > /tmp/cmd.exit"
+    ${debug} -e "******** Running command in container: \n" ${full_command} "\n********"
     docker exec --user flutter-dev "$CONTAINER_NAME" tmux send-keys -t dev " ${full_command}" ENTER
-    echo "waiting for exit code..."
+    ${debug} "waiting for exit code..."
     
     # 3. Wait (poll) until the exit code file is created
     while ! docker exec --user flutter-dev "$CONTAINER_NAME" stat /tmp/cmd.exit >/dev/null 2>&1; do
@@ -141,7 +140,7 @@ cmd_push() {
         exit 1
     fi
 
-    echo "Checking required environment variables in container..."
+    ${debug} "Checking required environment variables in container..."
     run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH and/or FLUTTER_BOLT_NAME are not defined. Run setproject first." >&2; exit 1; fi'
     if [ $? -ne 0 ]; then
         exit 1
@@ -157,7 +156,7 @@ cmd_debug() {
         exit 1
     fi
 
-    echo "Checking required environment variables in container..."
+    ${debug} "Checking required environment variables in container..."
     run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH and/or FLUTTER_BOLT_NAME are not defined. Run setproject first." >&2; exit 1; fi'
     if [ $? -ne 0 ]; then
         exit 1
