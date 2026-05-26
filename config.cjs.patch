@@ -1,0 +1,8 @@
+26,28c26,28
+< exports.REMOTE_PACKAGES_DIR = "/data/bolt/packages";
+< exports.REMOTE_MOUNTS_DIR = "/data/bolt/mounts";
+< exports.REMOTE_BUNDLES_DIR = "/data/bolt/bundles";
+---
+> exports.REMOTE_PACKAGES_DIR = "/media/mass_storage/data/bolt/packages";
+> exports.REMOTE_MOUNTS_DIR = "/media/mass_storage/data/bolt/mounts";
+> exports.REMOTE_BUNDLES_DIR = "/media/mass_storage/data/bolt/bundles";

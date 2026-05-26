@@ -14,12 +14,24 @@ REPO_ROOT=$(cd "$(dirname "$SCRIPT_PATH")" && git rev-parse --show-toplevel 2>/d
 # Utility to send commands to the container's background tmux bash session synchronously
 run_in_tmux() {
     local cmd="$1"
+    # If true, we won't wrap the command in exit code capture logic and will assume it handles its own output/exit code
+    if [ "$2" = "DIRECT" ]; then
+        is_direct=1
+    else
+        is_direct=0
+    fi
     
     # 1. Clean up state from any previous commands
     docker exec --user flutter-dev "$CONTAINER_NAME" bash -c 'rm -f /tmp/cmd.out /tmp/cmd.exit'
     
     # 2. Send the command.
-    full_command=" ( ${cmd} > /tmp/cmd.out 2>&1 ) ; echo \$? > /tmp/cmd.exit"
+    if [ "$is_direct" == "1" ]; then
+        # If it's a direct command, we don't wrap it in the exit code capture logic
+        full_command=" ${cmd} > /tmp/cmd.out 2>&1 ; echo "0" > /tmp/cmd.exit"
+    else
+        full_command=" ( ${cmd} > /tmp/cmd.out 2>&1 ) ; echo \$? > /tmp/cmd.exit"
+    fi
+    
     ${debug} -e "******** Running command in container: \n" ${full_command} "\n********"
     docker exec --user flutter-dev "$CONTAINER_NAME" tmux send-keys -t dev " ${full_command}" ENTER
     ${debug} "waiting for exit code..."
@@ -112,8 +124,8 @@ cmd_setproject() {
     fi
 
     echo "Setting project variables..."
-    run_in_tmux "export FLUTTER_PROJECT_SOURCE_CODE_PATH=\"$project_path\""
-    run_in_tmux "export FLUTTER_BOLT_NAME=\"$bolt_name\""
+    run_in_tmux "export FLUTTER_PROJECT_SOURCE_CODE_PATH=\"$project_path\"" DIRECT
+    run_in_tmux "export FLUTTER_BOLT_NAME=\"$bolt_name\"" DIRECT
     echo "Done."
 }
 
@@ -130,7 +142,7 @@ cmd_setdevice() {
     fi
 
     echo "Setting STB_IP variable..."
-    run_in_tmux "export STB_IP=\"$stb_ip\""
+    run_in_tmux "export STB_IP=\"$stb_ip\"" DIRECT
     echo "Done."
 }
 
