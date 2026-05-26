@@ -1,0 +1,219 @@
+#!/bin/bash
+
+# Resolve the canonical, absolute path of the script itself
+SCRIPT_PATH=$(readlink -f "$0")
+
+# Compute the instance ID using sha256 of the path
+INSTANCE_ID=$(echo -n "$SCRIPT_PATH" | sha256sum | awk '{print $1}')
+CONTAINER_NAME="flutter-bolt-dev-container-instance-${INSTANCE_ID}"
+
+# We assume this script lives within the meta-bolt-flutter tree. 
+# We'll try to find the git root to mount it properly. If not found, use script dir.
+REPO_ROOT=$(cd "$(dirname "$SCRIPT_PATH")" && git rev-parse --show-toplevel 2>/dev/null || dirname "$SCRIPT_PATH")
+
+# Utility to send commands to the container's background tmux bash session synchronously
+run_in_tmux() {
+    local cmd="$1"
+    
+    # 1. Clean up state from any previous commands
+    docker exec --user flutter-dev "$CONTAINER_NAME" bash -c 'rm -f /tmp/cmd.out /tmp/cmd.exit'
+    
+    # 2. Send the command.
+    #docker exec --user flutter-dev "$CONTAINER_NAME" tmux send-keys -t dev " ${cmd} > /tmp/cmd.out 2>&1; echo \$? > /tmp/cmd.exit" ENTER
+    full_command=" ${cmd} > /tmp/cmd.out 2>&1; echo \$? > /tmp/cmd.exit"
+    echo "Running in container: ${full_command}"
+    docker exec --user flutter-dev "$CONTAINER_NAME" tmux send-keys -t dev " ${full_command}" ENTER
+    echo "waiting for exit code..."
+    
+    # 3. Wait (poll) until the exit code file is created
+    while ! docker exec --user flutter-dev "$CONTAINER_NAME" stat /tmp/cmd.exit >/dev/null 2>&1; do
+        sleep 0.5
+    done
+    
+    # 4. Fetch the output and print it to the host terminal
+    docker exec --user flutter-dev "$CONTAINER_NAME" cat /tmp/cmd.out
+    
+    # 5. Fetch the exit code and return it
+    local exit_code=$(docker exec --user flutter-dev "$CONTAINER_NAME" cat /tmp/cmd.exit)
+    return $exit_code
+}
+
+is_running() {
+    if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null)" == "true" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+wait_for_tmux() {
+    echo "Waiting for tmux session to initialize..."
+    for i in {1..20}; do
+        if docker exec --user flutter-dev "$CONTAINER_NAME" tmux has-session -t dev 2>/dev/null; then
+            # Small extra sleep to allow bash to actually launch inside tmux
+            sleep 1 
+            return 0
+        fi
+        sleep 1
+    done
+    echo "Timed out waiting for tmux to start."
+    return 1
+}
+
+cmd_start() {
+    local tag="latest"
+    if [ "$1" == "--tag" ] && [ -n "$2" ]; then
+        tag="$2"
+    fi
+
+    if is_running; then
+        echo "Warning: Container instance '$CONTAINER_NAME' is already running."
+        echo "Attached repository path: $REPO_ROOT"
+        return 0
+    fi
+
+    # Clean up dead container if it exists
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
+
+    echo "Starting container $CONTAINER_NAME..."
+    echo "Mounting $REPO_ROOT to /meta-bolt-flutter..."
+
+    docker run -d --name "$CONTAINER_NAME" \
+        -e HOST_UID="$(id -u)" \
+        -e HOST_GID="$(id -g)" \
+        --security-opt apparmor=unconfined \
+        -v "$REPO_ROOT:/meta-bolt-flutter" \
+        -v "/home/tomasz.karczewski/copilot/flutter-wonderous-app:/appsrc/" \
+	-v "/tmp:/tmp" \
+	--network host \
+        "flutter-bolt-dev-container:$tag"
+    wait_for_tmux
+}
+
+cmd_setproject() {
+    local project_path="$1"
+    local bolt_name="$2"
+
+    if [ -z "$project_path" ] || [ -z "$bolt_name" ]; then
+        echo "Usage: $0 setproject <project-source-code-path> <bolt-name>"
+        exit 1
+    fi
+
+    if ! is_running; then
+        read -p "Container is not running. Would you like to start it? (y/N) " answer
+        case ${answer:0:1} in
+            y|Y )
+                cmd_start
+                ;;
+            * )
+                echo "Aborted."
+                exit 1
+                ;;
+        esac
+    fi
+
+    echo "Setting project variables..."
+    run_in_tmux "export FLUTTER_PROJECT_SOURCE_CODE_PATH=\"$project_path\""
+    run_in_tmux "export FLUTTER_BOLT_NAME=\"$bolt_name\""
+    echo "Done."
+}
+
+cmd_setdevice() {
+    local stb_ip="$1"
+    if [ -z "$stb_ip" ]; then
+        echo "Usage: $0 setdevice <stb-ip>"
+        exit 1
+    fi
+
+    if ! is_running; then
+        echo "Error: Container instance is not running."
+        exit 1
+    fi
+
+    echo "Setting STB_IP variable..."
+    run_in_tmux "export STB_IP=\"$stb_ip\""
+    echo "Done."
+}
+
+cmd_push() {
+    if ! is_running; then
+        echo "Error: Container instance is not running."
+        exit 1
+    fi
+
+    echo "Checking required environment variables in container..."
+    run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH and/or FLUTTER_BOLT_NAME are not defined. Run setproject first." >&2; exit 1; fi'
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+
+    # Execute the push echo output directly from inside the container mapped bash
+    run_in_tmux 'echo "asked to push ${FLUTTER_BOLT_NAME} from ${FLUTTER_PROJECT_SOURCE_CODE_PATH}"'
+}
+
+cmd_debug() {
+    if ! is_running; then
+        echo "Error: Container instance is not running."
+        exit 1
+    fi
+
+    echo "Checking required environment variables in container..."
+    run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH and/or FLUTTER_BOLT_NAME are not defined. Run setproject first." >&2; exit 1; fi'
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
+
+    # Execute the debug echo output directly from inside the container mapped bash
+    run_in_tmux 'echo "asked to debug ${FLUTTER_BOLT_NAME} from ${FLUTTER_PROJECT_SOURCE_CODE_PATH}"'
+}
+
+cmd_stop() {
+    if is_running; then
+        echo "Stopping container $CONTAINER_NAME..."
+        docker stop "$CONTAINER_NAME"
+    else
+        echo "Warning: Container instance $CONTAINER_NAME is not running."
+    fi
+}
+
+cmd_bash() {
+    if ! is_running; then
+        echo "Error: Container instance is not running."
+        exit 1
+    fi
+    docker exec --user flutter-dev -it "$CONTAINER_NAME" tmux attach-session -t dev
+}
+
+# -----------------
+# Entrypoint Router
+# -----------------
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+    start)
+        cmd_start "$@"
+        ;;
+    setproject)
+        cmd_setproject "$@"
+        ;;
+    setdevice)
+        cmd_setdevice "$@"
+        ;;
+    push)
+        cmd_push "$@"
+        ;;
+    debug)
+        cmd_debug "$@"
+        ;;
+    stop)
+        cmd_stop "$@"
+        ;;
+    bash)
+        cmd_bash "$@"
+        ;;
+    *)
+        echo "Usage: $0 {start|setproject|setdevice|push|debug|stop|bash} [args...]"
+        exit 1
+        ;;
+esac
