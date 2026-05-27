@@ -3,6 +3,8 @@ debug="echo [DEBUG]"
 # Resolve the canonical, absolute path of the script itself
 SCRIPT_PATH=$(readlink -f "$0")
 
+FLUTTER_PROJECT_SOURCE_CODE_PATH="/home/tomasz.karczewski/copilot/flutter-wonderous-app"
+
 # Compute the instance ID using sha256 of the path
 INSTANCE_ID=$(echo -n "$SCRIPT_PATH" | sha256sum | awk '{print $1}')
 CONTAINER_NAME="flutter-bolt-dev-container-instance-${INSTANCE_ID}"
@@ -72,6 +74,7 @@ is_running() {
     fi
 }
 
+
 wait_for_tmux() {
     echo "Waiting for tmux session to initialize..."
     for i in {1..20}; do
@@ -108,11 +111,14 @@ cmd_start() {
         -e HOST_UID="$(id -u)" \
         -e HOST_GID="$(id -g)" \
         --security-opt apparmor=unconfined \
-        -v "$REPO_ROOT:/meta-bolt-flutter" \
-        -v "/home/tomasz.karczewski/copilot/flutter-wonderous-app:/appsrc/" \
-	-v "/tmp:/tmp" \
-	--network host \
-        "flutter-bolt-dev-container:$tag"
+        -v "$REPO_ROOT:$REPO_ROOT" \
+        -v "${FLUTTER_PROJECT_SOURCE_CODE_PATH}:${FLUTTER_PROJECT_SOURCE_CODE_PATH}" \
+	    -v "/tmp:/tmp" \
+        -v "./tmux_init.sh:/usr/local/bin/tmux_init.sh" \
+        -v "./flutter_dev_entrypoint.sh:/usr/local/bin/entrypoint.sh" \
+	    --network host \
+        -e REPO_ROOT="${REPO_ROOT}" \
+        "flutter-bolt-dev:$tag"
     wait_for_tmux
 }
 
@@ -174,7 +180,7 @@ cmd_push() {
     fi
 
     # Execute the push echo output directly from inside the container mapped bash
-    run_in_tmux 'cd /meta-bolt-flutter/bolts; bolt push root@${STB_IP} com.rdkcentral.flutter.app.wonderous+0.1.0'
+    run_in_tmux 'cd ' ${META_BOLT_ROOT} '/bolts; bolt push root@${STB_IP} com.rdkcentral.flutter.app.wonderous+0.1.0'
 }
 
 cmd_debug() {
@@ -191,6 +197,11 @@ cmd_debug() {
 
     # Execute the debug echo output directly from inside the container mapped bash
     run_in_tmux 'bolt run root@${STB_IP} com.rdkcentral.flutter.app.wonderous+0.1.0' ASYNC
+
+    # CHECK THIS: a hack for 'flutter run' with custom device to discover the VM
+    # it is supposed to parse logs (d'oh)
+    sleep 15
+    echo flutter: The Dart VM service is listening on http://10.42.0.36:12345/
 }
 
 cmd_stop() {
@@ -237,6 +248,9 @@ case "$COMMAND" in
         ;;
     bash)
         cmd_bash "$@"
+        ;;
+    dockerbuild)
+        docker build . -f Dockerfile-flutter-bolt-dev -t flutter-bolt-dev
         ;;
     *)
         echo "Usage: $0 {start|setproject|setdevice|push|debug|stop|bash} [args...]"
