@@ -1,7 +1,6 @@
-From 7a3be1696f3c3ca5b1169af98cc5888137de60e0 Mon Sep 17 00:00:00 2001
-From: tomasz-karczewski-red <tomasz.karczewski@redembedded.com>
+Author: Tomasz Karczewski <tomasz.2173644@infosys.com>
+Source: includes simpleshell protocol definition (https://github.com/rdkcentral/westeros/blob/develop/simpleshell/protocol/simpleshell.xml), copyrighted by RDK
 Date: Thu, 14 May 2026 13:51:43 +0200
-Subject: [PATCH 2/2] waypp: add simpleshell protocol
 
 Adding support for RDK-specific simpleshell protocol.
 ---

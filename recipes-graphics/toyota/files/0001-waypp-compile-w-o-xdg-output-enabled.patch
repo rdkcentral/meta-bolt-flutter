@@ -1,13 +1,12 @@
-commit 01907766e21da1d1e0584f91e620cb3d31d567b5
-Author: tomasz-karczewski-red <tkarczewski.contractor@libertyglobal.com>
+Author: Tomasz Karczewski <tomasz.2173644@infosys.com>
 Date:   Fri May 15 13:28:33 2026 +0200
 
-    waypp: compile w/o xdg output enabled
+waypp: compile w/o xdg output enabled
 
-    WindowManager is using xdg_ouput structs unconditionally, so
-    the relevant scanner-generated structs must be there in all cases.
-    Otherwise, it is not possible to compile the embedder without
-    ENABLE_XDG_CLIENT set.
+WindowManager is using xdg_ouput structs unconditionally, so
+the relevant scanner-generated structs must be there in all cases.
+Otherwise, it is not possible to compile the embedder without
+ENABLE_XDG_CLIENT set.
 
 diff --git a/cmake/wayland.cmake b/cmake/wayland.cmake
 index 72c3392..83e2a2d 100644

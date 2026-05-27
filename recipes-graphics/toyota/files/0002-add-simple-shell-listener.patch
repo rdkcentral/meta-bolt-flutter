@@ -1,8 +1,7 @@
-commit 93674e3dda7709fca563864179e32880f6e7ff7c
 Author: Tomasz Karczewski <tomasz.2173644@ad.infosys.com>
 Date:   Tue May 19 14:27:51 2026 +0200
 
-    adding listener for wayland simple_shell
+adding listener for wayland simple_shell
 
 diff --git a/README.md b/README.md
 index 851e1b5c..25f52ace 100644

@@ -1,5 +1,4 @@
-From dd86875e3cabc969eb4943b5281287227202a49e Mon Sep 17 00:00:00 2001
-From: tomasz-karczewski-red <tomasz.karczewski@redembedded.com>
+Author: Tomasz Karczewski <tomasz.2173644@infosys.com>
 Date: Thu, 14 May 2026 13:09:10 +0200
 
 properly handle ENABLE_XDG_CLIENT ifdef
