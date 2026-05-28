@@ -1,5 +1,5 @@
 Author: Tomasz Karczewski <tomasz.2173644@infosys.com>
-Source: includes simpleshell protocol definition (https://github.com/rdkcentral/westeros/blob/develop/simpleshell/protocol/simpleshell.xml), copyrighted by RDK
+Source: includes simpleshell protocol definition (https://github.com/rdkcentral/westeros/blob/develop/simpleshell/protocol/simpleshell.xml)
 Date: Thu, 14 May 2026 13:51:43 +0200
 
 Adding support for RDK-specific simpleshell protocol.
