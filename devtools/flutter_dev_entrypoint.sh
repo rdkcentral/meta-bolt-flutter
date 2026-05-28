@@ -14,11 +14,11 @@ if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
 fi
 
 # Drop privileges to flutter-dev and start the tmux session
-exec sudo --preserve-env=REPO_ROOT,HOST_UID,HOST_GID -H -u flutter-dev bash -c '
+exec sudo --preserve-env=REPO_ROOT,HOST_UID,HOST_GID -H -u flutter-dev bash <<'EOF'
 tmux new-session -d -s dev "/usr/local/bin/tmux_init.sh"
 
 # Keep the container alive by polling the tmux session
 while tmux has-session -t dev 2>/dev/null; do
     sleep 2
 done
-'
+EOF

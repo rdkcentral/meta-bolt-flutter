@@ -3,15 +3,15 @@ debug="echo [DEBUG]"
 # Resolve the canonical, absolute path of the script itself
 SCRIPT_PATH=$(readlink -f "$0")
 
-FLUTTER_PROJECT_SOURCE_CODE_PATH="/home/tomasz.karczewski/copilot/flutter-wonderous-app"
+# FLUTTER_PROJECT_SOURCE_CODE_PATH="/home/tomasz.karczewski/copilot/flutter-wonderous-app"
 
 # Compute the instance ID using sha256 of the path
-INSTANCE_ID=$(echo -n "$SCRIPT_PATH" | sha256sum | awk '{print $1}')
+INSTANCE_ID=$(echo -n "$SCRIPT_PATH" | sha256sum | cut -d' ' -f1)
 CONTAINER_NAME="flutter-bolt-dev-container-instance-${INSTANCE_ID}"
 
-# We assume this script lives within the meta-bolt-flutter tree. 
-# We'll try to find the git root to mount it properly. If not found, use script dir.
-REPO_ROOT=$(cd "$(dirname "$SCRIPT_PATH")" && git rev-parse --show-toplevel 2>/dev/null || dirname "$SCRIPT_PATH")
+# this script should be within the meta-bolt-flutter tree. 
+REPO_ROOT=$(dirname $SCRIPT_PATH)
+#$(cd "$(dirname "$SCRIPT_PATH")" && git rev-parse --show-toplevel 2>/dev/null || dirname "$SCRIPT_PATH")
 
 # Utility to send commands to the container's background tmux bash session synchronously
 run_in_tmux() {
@@ -23,6 +23,7 @@ run_in_tmux() {
         is_direct=0
     fi
 
+    # if passed, we don't find for the command to return (and always report success)
     if [ "$2" = "ASYNC" ]; then
         is_async=1
     else
@@ -105,8 +106,8 @@ cmd_start() {
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 
     echo "Starting container $CONTAINER_NAME..."
-    echo "Mounting $REPO_ROOT to /meta-bolt-flutter..."
-
+    echo "Mounting ${REPO_ROOT} and ${FLUTTER_PROJECT_SOURCE_CODE_PATH}"
+    SCRIPT_DIR=`dirname "$0"`
     docker run -d --name "$CONTAINER_NAME" \
         -e HOST_UID="$(id -u)" \
         -e HOST_GID="$(id -g)" \
@@ -114,8 +115,8 @@ cmd_start() {
         -v "$REPO_ROOT:$REPO_ROOT" \
         -v "${FLUTTER_PROJECT_SOURCE_CODE_PATH}:${FLUTTER_PROJECT_SOURCE_CODE_PATH}" \
 	    -v "/tmp:/tmp" \
-        -v "./tmux_init.sh:/usr/local/bin/tmux_init.sh" \
-        -v "./flutter_dev_entrypoint.sh:/usr/local/bin/entrypoint.sh" \
+        -v "${SCRIPT_DIR}/tmux_init.sh:/usr/local/bin/tmux_init.sh" \
+        -v "${SCRIPT_DIR}/flutter_dev_entrypoint.sh:/usr/local/bin/entrypoint.sh" \
 	    --network host \
         -e REPO_ROOT="${REPO_ROOT}" \
         "flutter-bolt-dev:$tag"
@@ -164,7 +165,8 @@ cmd_setdevice() {
 
     echo "Setting STB_IP variable..."
     run_in_tmux "export STB_IP=\"$stb_ip\"" DIRECT
-    echo "Done."
+    STB_IP=$stb_ip
+    ${debug} "Done; STB_IP: ${STB_IP}."
 }
 
 cmd_push() {
@@ -188,6 +190,8 @@ cmd_debug() {
         echo "Error: Container instance is not running."
         exit 1
     fi
+    
+    ${debug} "Debug on: STB_IP: ${STB_IP}."
 
     ${debug} "Checking required environment variables in container..."
     run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH ($FLUTTER_PROJECT_SOURCE_CODE_PATH) and/or FLUTTER_BOLT_NAME ($FLUTTER_BOLT_NAME) are not defined. Run setproject first." >&2; exit 1; fi'
@@ -195,13 +199,27 @@ cmd_debug() {
         exit 1
     fi
 
-    # Execute the debug echo output directly from inside the container mapped bash
-    run_in_tmux 'bolt run root@${STB_IP} com.rdkcentral.flutter.app.wonderous+0.1.0' ASYNC
+    run_in_tmux 'bolt run root@${STB_IP} com.rdkcentral.flutter.app.wonderous+0.1.0 >/tmp/cmd.log 2>&1 >/tmp/bolt_run_output.log' ASYNC
 
-    # CHECK THIS: a hack for 'flutter run' with custom device to discover the VM
-    # it is supposed to parse logs (d'oh)
-    sleep 15
-    echo flutter: The Dart VM service is listening on http://10.42.0.36:12345/
+    CTR=15
+    # a hack for 'flutter run' with custom device: to discover the VM
+    # it is parsing the log to get 'listening on ...' line
+    # wait for 'The Dart VM service is listening on http://0.0.0.0:12345/'
+    while ! grep "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null && [ $CTR != 0 ]
+    do
+        ${debug} "Waiting for flutter app to start ... ($CTR)"
+        sleep 1
+        CTR=$(($CTR-1))
+    done
+    
+    if grep "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null
+    then
+        echo flutter: The Dart VM service is listening on http://${STB_IP}:12345/
+    else
+        echo "The app didn't start!"
+        exit 1
+    fi
+    exit 0
 }
 
 cmd_stop() {

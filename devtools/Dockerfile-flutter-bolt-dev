@@ -1,10 +1,8 @@
 # Note on kernel.apparmor_restrict_unprivileged_userns:
-# This security feature (sysctl) restricts user namespaces on Ubuntu 23.10+ and 24.04 hosts.
-# It cannot be fully bypassed from within the Dockerfile itself since Docker containers share
-# the host kernel settings.
-# 
 # To guarantee you don't run into issues on affected systems, you should run this container with:
 #   docker run --security-opt apparmor=unconfined ...
+# Another option: disable apparmor on the host, like:
+#   sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0 
 
 FROM ubuntu:22.04
 
@@ -12,7 +10,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV USER=flutter-dev
 
-# Install requested packages + dependencies for repo/locales
+# Install required packages 
 RUN apt update \
     && apt install -y --no-install-recommends \
         build-essential \
