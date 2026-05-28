@@ -4,7 +4,7 @@
   "versionName": "develop",
   "name": "Wonderous",
   "packageType": "application",
-  "entryPoint": "/usr/share/flutter/gskinnerteam-flutter-wonderous-app-wonders/3.38.3/release/",
+  "entryPoint": "/usr/share/flutter/gskinnerteam-flutter-wonderous-app-wonders/3.38.3/debug/ --vm-service-host=0.0.0.0 --vm-service-port=12345 --disable-service-auth-codes",
   "dependencies": {
     "com.rdkcentral.flutter.runtime.flutter-auto.v3_38_3": "0.0.1"
   },
