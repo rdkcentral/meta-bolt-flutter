@@ -10,7 +10,7 @@ INSTANCE_ID=$(echo -n "$SCRIPT_PATH" | sha256sum | cut -d' ' -f1)
 CONTAINER_NAME="flutter-bolt-dev-container-instance-${INSTANCE_ID}"
 
 # this script should be within the meta-bolt-flutter tree. 
-REPO_ROOT=$(dirname $SCRIPT_PATH)
+REPO_ROOT=$(realpath "$(dirname $SCRIPT_PATH)/..")
 #$(cd "$(dirname "$SCRIPT_PATH")" && git rev-parse --show-toplevel 2>/dev/null || dirname "$SCRIPT_PATH")
 
 # Utility to send commands to the container's background tmux bash session synchronously
@@ -75,7 +75,6 @@ is_running() {
     fi
 }
 
-
 wait_for_tmux() {
     echo "Waiting for tmux session to initialize..."
     for i in {1..20}; do
@@ -90,11 +89,18 @@ wait_for_tmux() {
     return 1
 }
 
+get_container_env() {
+    local env_name="$1"
+
+    docker exec --user flutter-dev "$CONTAINER_NAME" printenv "$env_name" 2>/dev/null
+}
+
 cmd_start() {
     local tag="latest"
-    if [ "$1" == "--tag" ] && [ -n "$2" ]; then
-        tag="$2"
-    fi
+    local project_path=""
+    local bolt_name=""
+    local stb_ip=""
+        local application_recipe=""
 
     if is_running; then
         echo "Warning: Container instance '$CONTAINER_NAME' is already running."
@@ -102,71 +108,62 @@ cmd_start() {
         return 0
     fi
 
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --tag)
+                if [ -z "$2" ]; then
+                    echo "Usage: $0 start [--tag <tag>] <project-source-code-path> <bolt-name> <stb-ip> <application-bitbake-recipe>"
+                    exit 1
+                fi
+                tag="$2"
+                shift 2
+                ;;
+            *)
+                if [ -z "$project_path" ]; then
+                    project_path="$1"
+                elif [ -z "$bolt_name" ]; then
+                    bolt_name="$1"
+                elif [ -z "$stb_ip" ]; then
+                    stb_ip="$1"
+                elif [ -z "$application_recipe" ]; then
+                    application_recipe="$1"
+                else
+                    echo "Usage: $0 start [--tag <tag>] <project-source-code-path> <bolt-name> <stb-ip> <application-bitbake-recipe>"
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$project_path" ] || [ -z "$bolt_name" ] || [ -z "$stb_ip" ] || [ -z "$application_recipe" ]; then
+        echo "Usage: $0 start [--tag <tag>] <project-source-code-path> <bolt-name> <stb-ip> <application-bitbake-recipe>"
+        exit 1
+    fi
+
     # Clean up dead container if it exists
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 
     echo "Starting container $CONTAINER_NAME..."
-    echo "Mounting ${REPO_ROOT} and ${FLUTTER_PROJECT_SOURCE_CODE_PATH}"
+    echo "Mounting ${REPO_ROOT} and ${project_path}"
     SCRIPT_DIR=`dirname "$0"`
     docker run -d --name "$CONTAINER_NAME" \
         -e HOST_UID="$(id -u)" \
         -e HOST_GID="$(id -g)" \
         --security-opt apparmor=unconfined \
         -v "$REPO_ROOT:$REPO_ROOT" \
-        -v "${FLUTTER_PROJECT_SOURCE_CODE_PATH}:${FLUTTER_PROJECT_SOURCE_CODE_PATH}" \
+	    -v "${project_path}:${project_path}" \
 	    -v "/tmp:/tmp" \
         -v "${SCRIPT_DIR}/tmux_init.sh:/usr/local/bin/tmux_init.sh" \
         -v "${SCRIPT_DIR}/flutter_dev_entrypoint.sh:/usr/local/bin/entrypoint.sh" \
 	    --network host \
         -e REPO_ROOT="${REPO_ROOT}" \
+        -e FLUTTER_PROJECT_SOURCE_CODE_PATH="${project_path}" \
+        -e FLUTTER_BOLT_NAME="${bolt_name}" \
+        -e STB_IP="${stb_ip}" \
+        -e FLUTTER_APPLICATION_RECIPE="${application_recipe}" \
         "flutter-bolt-dev:$tag"
-    wait_for_tmux
-}
-
-cmd_setproject() {
-    local project_path="$1"
-    local bolt_name="$2"
-
-    if [ -z "$project_path" ] || [ -z "$bolt_name" ]; then
-        echo "Usage: $0 setproject <project-source-code-path> <bolt-name>"
-        exit 1
-    fi
-
-    if ! is_running; then
-        read -p "Container is not running. Would you like to start it? (y/N) " answer
-        case ${answer:0:1} in
-            y|Y )
-                cmd_start
-                ;;
-            * )
-                echo "Aborted."
-                exit 1
-                ;;
-        esac
-    fi
-
-    echo "Setting project variables..."
-    run_in_tmux "export FLUTTER_PROJECT_SOURCE_CODE_PATH=\"$project_path\"" DIRECT
-    run_in_tmux "export FLUTTER_BOLT_NAME=\"$bolt_name\"" DIRECT
-    echo "Done."
-}
-
-cmd_setdevice() {
-    local stb_ip="$1"
-    if [ -z "$stb_ip" ]; then
-        echo "Usage: $0 setdevice <stb-ip>"
-        exit 1
-    fi
-
-    if ! is_running; then
-        echo "Error: Container instance is not running."
-        exit 1
-    fi
-
-    echo "Setting STB_IP variable..."
-    run_in_tmux "export STB_IP=\"$stb_ip\"" DIRECT
-    STB_IP=$stb_ip
-    ${debug} "Done; STB_IP: ${STB_IP}."
+    wait_for_tmux || return 1
 }
 
 cmd_push() {
@@ -176,7 +173,7 @@ cmd_push() {
     fi
 
     ${debug} "Checking required environment variables in container..."
-    run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ] || [ -z "$STB_IP" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH ($FLUTTER_PROJECT_SOURCE_CODE_PATH) and/or FLUTTER_BOLT_NAME ($FLUTTER_BOLT_NAME) and/or STB_IP ($STB_IP) are not defined. Run setproject and setdevice first." >&2; exit 1; fi'
+    run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ] || [ -z "$STB_IP" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH ($FLUTTER_PROJECT_SOURCE_CODE_PATH) and/or FLUTTER_BOLT_NAME ($FLUTTER_BOLT_NAME) and/or STB_IP ($STB_IP) are not defined. Start the container with <project-source-code-path> <bolt-name> <stb-ip> first." >&2; exit 1; fi'
     if [ $? -ne 0 ]; then
         exit 1
     fi
@@ -186,15 +183,19 @@ cmd_push() {
 }
 
 cmd_debug() {
+    local stb_ip=""
+
     if ! is_running; then
         echo "Error: Container instance is not running."
         exit 1
     fi
+
+    stb_ip=$(get_container_env STB_IP)
     
-    ${debug} "Debug on: STB_IP: ${STB_IP}."
+    ${debug} "Debug on: STB_IP: ${stb_ip}."
 
     ${debug} "Checking required environment variables in container..."
-    run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH ($FLUTTER_PROJECT_SOURCE_CODE_PATH) and/or FLUTTER_BOLT_NAME ($FLUTTER_BOLT_NAME) are not defined. Run setproject first." >&2; exit 1; fi'
+    run_in_tmux 'if [ -z "$FLUTTER_PROJECT_SOURCE_CODE_PATH" ] || [ -z "$FLUTTER_BOLT_NAME" ] || [ -z "$STB_IP" ]; then echo "ERROR: FLUTTER_PROJECT_SOURCE_CODE_PATH ($FLUTTER_PROJECT_SOURCE_CODE_PATH) and/or FLUTTER_BOLT_NAME ($FLUTTER_BOLT_NAME) and/or STB_IP ($STB_IP) are not defined. Start the container with <project-source-code-path> <bolt-name> <stb-ip> first." >&2; exit 1; fi'
     if [ $? -ne 0 ]; then
         exit 1
     fi
@@ -214,7 +215,7 @@ cmd_debug() {
     
     if grep "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null
     then
-        echo flutter: The Dart VM service is listening on http://${STB_IP}:12345/
+        echo flutter: The Dart VM service is listening on http://${stb_ip}:12345/
     else
         echo "The app didn't start!"
         exit 1
@@ -249,12 +250,6 @@ case "$COMMAND" in
     start)
         cmd_start "$@"
         ;;
-    setproject)
-        cmd_setproject "$@"
-        ;;
-    setdevice)
-        cmd_setdevice "$@"
-        ;;
     push)
         cmd_push "$@"
         ;;
@@ -271,7 +266,8 @@ case "$COMMAND" in
         docker build . -f Dockerfile-flutter-bolt-dev -t flutter-bolt-dev
         ;;
     *)
-        echo "Usage: $0 {start|setproject|setdevice|push|debug|stop|bash} [args...]"
+        echo "Usage: $0 {start|push|debug|stop|bash|dockerbuild} [args...]"
+        echo "  start [--tag <tag>] <project-source-code-path> <bolt-name> <stb-ip> <application-bitbake-recipe>"
         exit 1
         ;;
 esac
