@@ -1,7 +1,7 @@
 {
   "config": "com.rdkcentral.flutter.app.wonderous.json",
   "bitbake": {
-    "image": "gskinnerteam-flutter-wonderous-app-wonders-bolt-image"
+    "image": "gskinnerteam-flutter-wonderous-app-wonders-release-bolt-image"
   }
 }
 
