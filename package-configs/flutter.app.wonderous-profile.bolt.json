@@ -1,0 +1,7 @@
+{
+  "config": "com.rdkcentral.flutter.app.wonderous-profile.json",
+  "bitbake": {
+    "image": "gskinnerteam-flutter-wonderous-app-wonders-profile-bolt-image"
+  }
+}
+
