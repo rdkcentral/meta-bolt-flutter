@@ -1,0 +1,19 @@
+{
+  "id": "com.rdkcentral.flutter.app.myapp-debug",
+  "version": "0.1.0",
+  "versionName": "develop",
+  "name": "My App TODO",
+  "packageType": "application",
+  "entryPoint": "/usr/share/flutter/myapp/3.38.3/debug/",
+  "dependencies": {
+    "com.rdkcentral.flutter.runtime.flutter-auto.v3_38_3-debug": "0.0.1"
+  },
+  "permissions": [
+    "urn:rdk:permission:internet",
+    "urn:rdk:permission:firebolt",
+    "urn:rdk:permission:thunder",
+    "urn:rdk:permission:rialto"
+  ],
+  "configuration": {
+  }
+}

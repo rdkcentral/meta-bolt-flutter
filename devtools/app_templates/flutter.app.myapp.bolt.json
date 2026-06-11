@@ -1,0 +1,6 @@
+{
+  "config": "com.rdkcentral.flutter.app.myapp.json",
+  "bitbake": {
+    "image": "myapp-bolt-image-release"
+  }
+}
