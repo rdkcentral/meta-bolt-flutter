@@ -21,9 +21,9 @@ then
     echo SSTATE_DIR=\"${SSTATE_PATH}\" >> ${REPO_ROOT}/build/conf/local.conf
 fi
 
-if ! [ -d ${REPO_ROOT}/bolts ]
+if ! [ -d ${REPO_ROOT}/build/bolts ]
 then
-    mkdir ${REPO_ROOT}/bolts
+    mkdir ${REPO_ROOT}/build/bolts
 fi
 
 cd ${REPO_ROOT}/build
@@ -51,7 +51,7 @@ bitbake base-bolt-image
 # Add the meta-bolt package-config location so `bolt make base` can resolve it.
 echo "${REPO_ROOT}/deps/bolt" >> ${REPO_ROOT}/build/conf/setup.done
 
-cd ${REPO_ROOT}/bolts
+cd ${REPO_ROOT}/build/bolts
 
 bolt make base
 bolt make flutter.runtime.flutter-auto.v3_38_3

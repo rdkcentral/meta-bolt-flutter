@@ -9,6 +9,7 @@ SCRIPT_PATH=$(readlink -f "$0")
 # Compute the instance ID using sha256 of the path
 INSTANCE_ID=$(echo -n "$SCRIPT_PATH" | sha256sum | cut -d' ' -f1)
 CONTAINER_NAME="flutter-bolt-dev-container-instance-${INSTANCE_ID}"
+BUILD_VOLUME_NAME="flutter-bolt-dev-build-${INSTANCE_ID}"
 
 # This script is expected to live inside the meta-bolt-flutter tree.
 REPO_ROOT=$(realpath "$(dirname $SCRIPT_PATH)/..")
@@ -99,8 +100,15 @@ start_usage() {
 }
 
 first_time_init_usage() {
-    echo "Usage: $0 first_time_init [--tag <tag>] --downloads-path <downloads-path> --sstate-path <sstate-path>"
-    echo "   or: $0 first_time_init [--tag <tag>] --init-cache-path <init-cache-path>"
+    echo "Usage: $0 first_time_init [--tag <tag>] [--use-build-volume] --downloads-path <downloads-path> --sstate-path <sstate-path>"
+    echo "   or: $0 first_time_init [--tag <tag>] [--use-build-volume] --init-cache-path <init-cache-path>"
+}
+
+require_first_time_init_value() {
+    if [ $# -lt 2 ]; then
+        first_time_init_usage
+        exit 1
+    fi
 }
 
 cmd_start() {
@@ -181,6 +189,12 @@ cmd_start() {
         docker_args+=( -e "SSTATE_PATH=${sstate_path}" )
     fi
 
+    if docker volume inspect "$BUILD_VOLUME_NAME" >/dev/null 2>&1; then
+        echo "Found Docker build volume ${BUILD_VOLUME_NAME}; mounting it at ${REPO_ROOT}/build."
+        docker_args+=( -v "${BUILD_VOLUME_NAME}:${REPO_ROOT}/build" )
+        docker_args+=( -e "BOLT_BUILD_VOLUME_NAME=${BUILD_VOLUME_NAME}" )
+    fi
+
     # Remove a stopped container with the same generated name, if present.
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 
@@ -213,6 +227,7 @@ cmd_first_time_init() {
     local downloads_path=""
     local sstate_path=""
     local init_cache_path=""
+    local build_volume_enabled="false"
     local docker_args=()
 
     if is_running; then
@@ -223,22 +238,26 @@ cmd_first_time_init() {
     fi
 
     while [ $# -gt 0 ]; do
-        if [ $# -lt 2 ]; then
-            first_time_init_usage
-            exit 1
-        fi
-
         case "$1" in
+            --use-build-volume)
+                build_volume_enabled="true"
+                shift
+                continue
+                ;;
             --tag)
+                require_first_time_init_value "$@"
                 tag="$2"
                 ;;
             --downloads-path)
+                require_first_time_init_value "$@"
                 downloads_path="$2"
                 ;;
             --sstate-path)
+                require_first_time_init_value "$@"
                 sstate_path="$2"
                 ;;
             --init-cache-path)
+                require_first_time_init_value "$@"
                 init_cache_path="$2"
                 ;;
             *)
@@ -300,6 +319,17 @@ cmd_first_time_init() {
         docker_args+=( -e "SSTATE_PATH=${sstate_path}" )
     fi
 
+    if [ "$build_volume_enabled" = "true" ]; then
+        if docker volume inspect "$BUILD_VOLUME_NAME" >/dev/null 2>&1; then
+            echo "Using existing Docker build volume ${BUILD_VOLUME_NAME}."
+        else
+            echo "Creating Docker build volume ${BUILD_VOLUME_NAME}."
+            docker volume create "$BUILD_VOLUME_NAME" >/dev/null
+        fi
+        docker_args+=( -v "${BUILD_VOLUME_NAME}:${REPO_ROOT}/build" )
+        docker_args+=( -e "BOLT_BUILD_VOLUME_NAME=${BUILD_VOLUME_NAME}" )
+    fi
+
     # Remove a stopped container with the same generated name, if present.
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 
@@ -336,7 +366,7 @@ cmd_push() {
     fi
 
     # Run the push command from the container tmux session.
-    run_in_tmux 'cd ${REPO_ROOT}/bolts; bolt push root@${STB_IP} ${FLUTTER_OUTPUT_BOLT_NAME}'
+    run_in_tmux 'cd ${REPO_ROOT}/build/bolts; bolt push root@${STB_IP} ${FLUTTER_OUTPUT_BOLT_NAME}'
 }
 
 cmd_make() {
@@ -346,7 +376,7 @@ cmd_make() {
     fi
 
     # Run the build command from the container tmux session.
-    run_in_tmux 'cd ${REPO_ROOT}/bolts; bolt make ${FLUTTER_BOLT_NAME}'
+    run_in_tmux 'mkdir -p ${REPO_ROOT}/build/bolts; cd ${REPO_ROOT}/build/bolts; bolt make ${FLUTTER_BOLT_NAME}'
 }
 
 cmd_debug() {
@@ -445,8 +475,8 @@ case "$COMMAND" in
         ;;
     *)
         echo "Usage: $0 {first_time_init|start|push|debug|stop|bash|dockerbuild|make|makepush|ctrlc} [args...]"
-        echo "  first_time_init [--tag <tag>] --downloads-path <downloads-path> --sstate-path <sstate-path>"
-        echo "  first_time_init [--tag <tag>] --init-cache-path <init-cache-path>"
+        echo "  first_time_init [--tag <tag>] [--use-build-volume] --downloads-path <downloads-path> --sstate-path <sstate-path>"
+        echo "  first_time_init [--tag <tag>] [--use-build-volume] --init-cache-path <init-cache-path>"
         echo "  start [--tag <tag>] --project-path <project-source-code-path> --bolt-name <bolt-name> --stb-ip <stb-ip> --application-recipe <application-bitbake-recipe> [--downloads-path <downloads-path>] [--sstate-path <sstate-path>]"
         exit 1
         ;;

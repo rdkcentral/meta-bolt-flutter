@@ -45,6 +45,9 @@ Run `first_time_init` once for a fresh checkout before starting application deve
 
 A cold build can take 1-2 hours. It is much faster when you reuse already populated Yocto downloads and sstate cache directories from a previous compatible build, as described in the next section.
 
+It is possible to pass `--use-build-volume` to store the Yocto `build` directory in a Docker volume instead of the repository bind mount. This is necessary if the host filesystem is not Linux extfs, since yocto is expecting some extfs-specific filesystem features during build; this is necessary eg. on Apple arm M* devices.
+The wrapper creates a repo-specific volume during first-time initialization (flutter-bolt-dev-build-*), mounts it at `${REPO_ROOT}/build`, and automatically reuses it on later `start` commands when the matching volume exists. Bolt packages are created under `${REPO_ROOT}/build/bolts`.
+
 ### Use Existing Downloads and Sstate
 
 If you already have cache directories, pass both paths:
@@ -52,6 +55,7 @@ If you already have cache directories, pass both paths:
 ```bash
 cd "${REPO_ROOT}"
 devtools/flutter_bolt_dev_container.sh first_time_init \
+    --use-build-volume \
     --downloads-path "${OE_DOWNLOADS}" \
     --sstate-path "${OE_SSTATE_PATH}"
 ```
@@ -72,6 +76,7 @@ If you do not have prewarmed cache directories, let the script create them:
 ```bash
 cd "${REPO_ROOT}"
 devtools/flutter_bolt_dev_container.sh first_time_init \
+    --use-build-volume \
     --init-cache-path "${REPO_ROOT}/build/init-cache"
 ```
 
@@ -215,7 +220,7 @@ Typical use is to copy the template set, replace `myapp` with your recipe/applic
 `devtools/flutter_bolt_dev_container.sh` supports these commands:
 
 - `dockerbuild`: builds the local `flutter-bolt-dev` Docker image.
-- `first_time_init`: starts a setup container and performs the initial repo, BitBake, base image, and runtime Bolt setup. Requires either `--downloads-path` plus `--sstate-path`, or `--init-cache-path`.
+- `first_time_init`: starts a setup container and performs the initial repo, BitBake, base image, and runtime Bolt setup. Requires either `--downloads-path` plus `--sstate-path`, or `--init-cache-path`; accepts `--use-build-volume` to put `${REPO_ROOT}/build` in a repo-specific Docker volume.
 - `start`: starts the app development container. Requires `--project-path`, `--bolt-name`, `--stb-ip`, and `--application-recipe`; accepts optional cache paths and Docker tag.
 - `bash`: attaches to the container's `tmux` session. Exiting the shell stops the session and then the container; detach with `Ctrl+B`, then `D` to keep it running.
 - `make`: runs `bolt make` for the configured Flutter Bolt package.
