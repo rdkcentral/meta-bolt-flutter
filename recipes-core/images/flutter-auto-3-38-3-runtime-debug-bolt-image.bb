@@ -3,7 +3,7 @@ SUMMARY = "Flutter runtime bolt image"
 # flutter-engine from https://github.com/meta-flutter/meta-flutter/tree/master/recipes-graphics/flutter-engine
 # flutter-auto embedder maintained by AGL/toyota, see https://github.com/toyota-connected/ivi-homescreen
 # We adapted it to support RDK simple-shell, see code in https://github.com/bcatrysse/ivi-homescreen/tree/v2.0_with_simple_shell
-# status 27 March 2026 by BartC : is compiling successfully, successfull bolt runtime test done on RDK-8 brcm VA with wonderous flutter app
+# status 27 March 2026 by BartC : is compiling successfully, successful bolt runtime test done on RDK-8 brcm VA with wonderous flutter app
 
 inherit base-bolt-image
 
