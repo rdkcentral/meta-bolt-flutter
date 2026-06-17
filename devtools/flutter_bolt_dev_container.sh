@@ -17,12 +17,6 @@ REPO_ROOT=$(realpath "$(dirname $SCRIPT_PATH)/..")
 # Utility to send commands to the container's background tmux bash session synchronously
 run_in_tmux() {
     local cmd="$1"
-    # If true, we won't wrap the command in exit code capture logic and will assume it handles its own output/exit code
-    if [ "$2" = "DIRECT" ]; then
-        is_direct=1
-    else
-        is_direct=0
-    fi
 
     # If set, do not wait for the command to complete.
     if [ "$2" = "ASYNC" ]; then
@@ -35,10 +29,7 @@ run_in_tmux() {
     docker exec --user flutter-dev "$CONTAINER_NAME" bash -c 'rm -f /tmp/cmd.out /tmp/cmd.exit'
 
     # 2. Send the command.
-    if [ "$is_direct" == "1" ]; then
-        # Direct mode skips the explicit exit-code wrapper.
-        full_command="${cmd} > /tmp/cmd.out 2>&1 ; echo "0" > /tmp/cmd.exit"
-    elif [ "$is_async" == "1" ]; then
+    if [ "$is_async" == "1" ]; then
         full_command="${cmd}"
     else
         full_command="( ${cmd} > /tmp/cmd.out 2>&1 ) ; echo \$? > /tmp/cmd.exit"
@@ -53,16 +44,29 @@ run_in_tmux() {
     fi
 
     ${debug} "waiting for exit code..."
-    
-    # 3. Wait (poll) until the exit code file is created
-    while ! docker exec --user flutter-dev "$CONTAINER_NAME" stat /tmp/cmd.exit >/dev/null 2>&1; do
-        sleep 0.5
-    done
 
-    # 4. Fetch the output and print it to the host terminal
-    docker exec --user flutter-dev "$CONTAINER_NAME" cat /tmp/cmd.out
+    # 3. Stream command output until the exit code file is created.
+    docker exec --user flutter-dev "$CONTAINER_NAME" bash -c '
+        while [ ! -e /tmp/cmd.out ]; do
+            if [ -e /tmp/cmd.exit ]; then
+                exit 0
+            fi
+            sleep 0.1
+        done
 
-    # 5. Fetch the exit code and return it
+        tail -n +1 -f /tmp/cmd.out &
+        tail_pid=$!
+
+        while [ ! -e /tmp/cmd.exit ]; do
+            sleep 0.5
+        done
+
+        sleep 0.1
+        kill "$tail_pid" >/dev/null 2>&1
+        wait "$tail_pid" 2>/dev/null || true
+    '
+
+    # 4. Fetch the exit code and return it
     local exit_code=$(docker exec --user flutter-dev "$CONTAINER_NAME" cat /tmp/cmd.exit)
     return $exit_code
 }
@@ -228,6 +232,7 @@ cmd_first_time_init() {
     local sstate_path=""
     local init_cache_path=""
     local build_volume_enabled="false"
+    local first_time_init_log="/tmp/${CONTAINER_NAME}-first_time_init.log"
     local docker_args=()
 
     if is_running; then
@@ -332,6 +337,7 @@ cmd_first_time_init() {
 
     # Remove a stopped container with the same generated name, if present.
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
+    rm -f "$first_time_init_log"
 
     echo "Starting first-time init container $CONTAINER_NAME..."
     echo "Mounting ${REPO_ROOT}"
@@ -346,6 +352,7 @@ cmd_first_time_init() {
         "${docker_args[@]}" \
         --network host \
         -e REPO_ROOT="${REPO_ROOT}" \
+        -e FIRST_TIME_INIT_LOG="${first_time_init_log}" \
         -e TMUX_INIT_SCRIPT="/usr/local/bin/first_time_init_tmux.sh" \
         "flutter-bolt-dev:$tag"
     wait_for_tmux || return 1
@@ -357,6 +364,23 @@ cmd_first_time_init() {
     else
         echo "First-time init is running in tmux. Attach with: $0 bash"
     fi
+
+    echo "Waiting for first-time init container to close..."
+    local container_exit_code
+    if ! container_exit_code=$(docker wait "$CONTAINER_NAME"); then
+        echo "Error: Failed while waiting for first-time init container to close."
+        return 1
+    fi
+
+    if [ -f "$first_time_init_log" ]; then
+        echo "******** first_time_init log ********"
+        cat "$first_time_init_log"
+        echo "******** end first_time_init log ********"
+    else
+        echo "Warning: first-time init log was not found: $first_time_init_log"
+    fi
+
+    return "$container_exit_code"
 }
 
 cmd_push() {

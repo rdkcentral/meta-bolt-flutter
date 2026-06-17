@@ -1,5 +1,11 @@
 #!/bin/bash
 
+if [ -n "${FIRST_TIME_INIT_LOG}" ]; then
+    mkdir -p "$(dirname "${FIRST_TIME_INIT_LOG}")"
+    # redirect stdout of current process to tee cmd
+    exec > >(tee "${FIRST_TIME_INIT_LOG}") 2>&1
+fi
+
 echo "first_time_init: starting with root ${REPO_ROOT}"
 sleep 5
 
