@@ -419,14 +419,14 @@ cmd_debug() {
 
     CTR=15
     # Poll the target log until the Dart VM service endpoint becomes available.
-    while ! grep "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null && [ $CTR != 0 ]
+    while ! grep -q "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null 2>&1 && [ $CTR != 0 ]
     do
         ${debug} "Waiting for flutter app to start ... ($CTR)"
         sleep 1
         CTR=$(($CTR-1))
     done
 
-    if grep "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null
+    if grep -q "Dart VM service is listening on" /tmp/bolt_run_output.log >/dev/null
     then
         echo flutter: The Dart VM service is listening on http://${stb_ip}:22342/
     else
@@ -479,7 +479,7 @@ case "$COMMAND" in
         cmd_bash "$@"
         ;;
     dockerbuild)
-        docker build . -f Dockerfile-flutter-bolt-dev -t flutter-bolt-dev
+        docker build "$REPO_ROOT/devtools" -f "$REPO_ROOT/devtools/Dockerfile-flutter-bolt-dev" -t flutter-bolt-dev
         ;;
     make)
         cmd_make "$@"

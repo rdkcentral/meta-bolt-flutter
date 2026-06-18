@@ -11,12 +11,12 @@ then
     exit 1
 fi
 
-if [ -n "${DOWNLOADS_PATH}" ]
+if [ -n "${DOWNLOADS_PATH}" ] && ! grep -q '^DL_DIR' "${REPO_ROOT}/build/conf/local.conf"
 then
     echo DL_DIR=\"${DOWNLOADS_PATH}\" >> ${REPO_ROOT}/build/conf/local.conf
 fi
 
-if [ -n "${SSTATE_PATH}" ]
+if [ -n "${SSTATE_PATH}" ] && ! grep -q '^SSTATE_DIR' "${REPO_ROOT}/build/conf/local.conf"
 then
     echo SSTATE_DIR=\"${SSTATE_PATH}\" >> ${REPO_ROOT}/build/conf/local.conf
 fi
@@ -28,7 +28,7 @@ fi
 
 cd ${REPO_ROOT}/build
 
-if ! grep rm_work conf/local.conf
+if ! grep -q rm_work conf/local.conf
 then
     if [ -z "${INIT_CACHE_PATH}" ]
     then

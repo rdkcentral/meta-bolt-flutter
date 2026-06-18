@@ -1,4 +1,4 @@
-SUMMARY = "My magnificient app"
+SUMMARY = "My magnificent app"
 
 inherit base-bolt-image
 IMAGE_INSTALL += "myapp-release"

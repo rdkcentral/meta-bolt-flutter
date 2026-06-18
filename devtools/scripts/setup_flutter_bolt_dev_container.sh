@@ -1,8 +1,9 @@
 #!/bin/bash
 # env: REPO_ROOT,HOST_UID,HOST_GID,FLUTTER_PROJECT_SOURCE_CODE_PATH,FLUTTER_BOLT_NAME,STB_IP,FLUTTER_APPLICATION_RECIPE
+
 export REPO_ROOT
 
-cd ${REPO_ROOT}
+cd "${REPO_ROOT}"
 
 # need some git config, otherwise repo refuses to cooperate
 git config --global user.email "you@example.com"
