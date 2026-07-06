@@ -1,0 +1,84 @@
+Author: Tomasz Karczewski <tomasz.2173644@infosys.com>
+Date:   Fri May 15 13:28:33 2026 +0200
+
+waypp: compile w/o xdg output enabled
+
+WindowManager is using xdg_ouput structs unconditionally, so
+the relevant scanner-generated structs must be there in all cases.
+Otherwise, it is not possible to compile the embedder without
+ENABLE_XDG_CLIENT set.
+
+diff --git a/cmake/wayland.cmake b/cmake/wayland.cmake
+index 72c3392..83e2a2d 100644
+--- a/cmake/wayland.cmake
++++ b/cmake/wayland.cmake
+@@ -87,6 +87,11 @@ if (ENABLE_XDG_CLIENT)
+     message(STATUS "XDG Output Manager .... ${HAS_WAYLAND_PROTOCOL_XDG_OUTPUT_UNSTABLE_V1}")
+     add_protocol(${WAYLAND_PROTOCOLS_BASE}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml)
+     message(STATUS "XDG Decoration ........ ${HAS_WAYLAND_PROTOCOL_XDG_DECORATION_UNSTABLE_V1}")
++else ()
++    # still need to generate xdg-output stubs, they're unconditionally used in the implementation
++    add_protocol(${WAYLAND_PROTOCOLS_BASE}/unstable/xdg-output/xdg-output-unstable-v1.xml)
++    # but do not announce the support
++    set(HAS_WAYLAND_PROTOCOL_XDG_OUTPUT_UNSTABLE_V1 FALSE)
+ endif ()
+ 
+ if (ENABLE_AGL_SHELL_CLIENT)
+diff --git a/cmake/waypp.h.in b/cmake/waypp.h.in
+index 98bb489..fba9098 100644
+--- a/cmake/waypp.h.in
++++ b/cmake/waypp.h.in
+@@ -148,9 +148,8 @@
+ #include "viewporter-client-protocol.h"
+ #endif
+ 
+-#if HAS_WAYLAND_PROTOCOL_XDG_OUTPUT_UNSTABLE_V1
++// xdg-output-unstable structs are used in common code, so including unconditionally
+ #include "xdg-output-unstable-v1-client-protocol.h"
+-#endif
+ 
+ #if HAS_WAYLAND_PROTOCOL_XDG_ACTIVATION_V1
+ #include "xdg-activation-v1-client-protocol.h"
+diff --git a/include/waypp/window_manager/registrar.h b/include/waypp/window_manager/registrar.h
+index 3818ba8..c4eab3e 100644
+--- a/include/waypp/window_manager/registrar.h
++++ b/include/waypp/window_manager/registrar.h
+@@ -76,17 +76,13 @@ class Registrar {
+ 
+   [[nodiscard]] wl_shm* get_shm() const { return wl_shm_; }
+ 
+-#if ENABLE_XDG_CLIENT
+-
+-  [[nodiscard]] xdg_wm_base* get_xdg_wm_base() const { return xdg_wm_base_; }
+-
+-#if HAS_WAYLAND_PROTOCOL_XDG_OUTPUT_UNSTABLE_V1
+-
+   [[nodiscard]] zxdg_output_manager_v1* get_xdg_output_manager() const {
+     return zxdg_output_manager_v1_;
+   }
+ 
+-#endif
++#if ENABLE_XDG_CLIENT
++
++  [[nodiscard]] xdg_wm_base* get_xdg_wm_base() const { return xdg_wm_base_; }
+ 
+ #if HAS_WAYLAND_PROTOCOL_XDG_ACTIVATION_V1
+ 
+@@ -229,15 +225,14 @@ class Registrar {
+   wl_shm* wl_shm_{};
+   wl_subcompositor* wl_subcompositor_{};
+ 
++  zxdg_output_manager_v1* zxdg_output_manager_v1_{};
++
+ #if ENABLE_XDG_CLIENT
+   xdg_wm_base* xdg_wm_base_{};
+ #if HAS_WAYLAND_PROTOCOL_XDG_DECORATION_UNSTABLE_V1
+   zxdg_decoration_manager_v1* zxdg_decoration_manager_v1_{};
+   zxdg_toplevel_decoration_v1* zxdg_toplevel_decoration_v1_{};
+ #endif
+-#if HAS_WAYLAND_PROTOCOL_XDG_OUTPUT_UNSTABLE_V1
+-  zxdg_output_manager_v1* zxdg_output_manager_v1_{};
+-#endif
+ #if HAS_WAYLAND_PROTOCOL_XDG_ACTIVATION_V1
+   struct xdg_activation_v1* xdg_activation_v1_{};
+ #endif
