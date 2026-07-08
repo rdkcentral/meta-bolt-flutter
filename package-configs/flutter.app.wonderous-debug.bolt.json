@@ -1,0 +1,7 @@
+{
+  "config": "com.rdkcentral.flutter.app.wonderous-debug.json",
+  "bitbake": {
+    "image": "gskinnerteam-flutter-wonderous-app-wonders-debug-bolt-image"
+  }
+}
+

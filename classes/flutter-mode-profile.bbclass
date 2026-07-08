@@ -1,0 +1,1 @@
+FLUTTER_APP_RUNTIME_MODES = "profile"

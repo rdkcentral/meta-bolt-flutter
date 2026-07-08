@@ -1,6 +1,7 @@
 # --- Adding launcher script that allows to pass in right flutter launch app path coming from entryPoint in package-config of the separate app bolt package
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 SRC_URI:append = " file://flutter-auto-bolt.sh"
+SRC_URI:append = " file://flutter-auto-bolt-debug.sh"
 
 # ivi-homescreen patches
 SRC_URI:append = " \
@@ -29,8 +30,11 @@ EXTRA_OECMAKE += "\
     -DBUILD_PLUGINS=OFF \
     -DENABLE_DBUS=OFF \
 "
+
 FILES:${PN}:append = " ${bindir}/flutter-auto-bolt.sh"
+FILES:${PN}:append = " ${bindir}/flutter-auto-bolt-debug.sh"
 
 do_install:append() {
 	install -m 0555 ${WORKDIR}/flutter-auto-bolt.sh ${D}${bindir}
+	install -m 0555 ${WORKDIR}/flutter-auto-bolt-debug.sh ${D}${bindir}
 }
