@@ -19,7 +19,10 @@ Host *
     UserKnownHostsFile /dev/null
 EOF
 
-. setup-environment
+if ! . setup-environment; then
+    echo "ERROR: setup-environment failed."
+    return 1 2>/dev/null || exit 1
+fi
 
 if [ -d "${REPO_ROOT}/build" ] && [ -f "${REPO_ROOT}/build/conf/local.conf" ]
 then

@@ -9,7 +9,7 @@ fi
 echo "first_time_init: starting with root ${REPO_ROOT}"
 sleep 5
 
-if [ -z "${REPO_ROOT}" ] || [ ! -d "${REPO_ROOT}" ] || ! cd ${REPO_ROOT}; then
+if [ -z "${REPO_ROOT}" ] || [ ! -d "${REPO_ROOT}" ] || ! cd "${REPO_ROOT}"; then
     echo "ERROR: REPO_ROOT is not set or does not exist: ${REPO_ROOT}"
     exec bash
 fi

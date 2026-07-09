@@ -12,7 +12,7 @@ CONTAINER_NAME="flutter-bolt-dev-container-instance-${INSTANCE_ID}"
 BUILD_VOLUME_NAME="flutter-bolt-dev-build-${INSTANCE_ID}"
 
 # This script is expected to live inside the meta-bolt-flutter tree.
-REPO_ROOT=$(realpath "$(dirname $SCRIPT_PATH)/..")
+REPO_ROOT=$(realpath "$(dirname "$SCRIPT_PATH")/..")
 
 # Utility to send commands to the container's background tmux bash session synchronously
 run_in_tmux() {
