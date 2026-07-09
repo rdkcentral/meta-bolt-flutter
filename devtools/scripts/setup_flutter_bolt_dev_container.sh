@@ -21,10 +21,9 @@ EOF
 
 . setup-environment
 
-if [ -d ${REPO_ROOT}/build ] && [ -f ${REPO_ROOT}/build/conf/local.conf ]
+if [ -d "${REPO_ROOT}/build" ] && [ -f "${REPO_ROOT}/build/conf/local.conf" ]
 then
-    cd ${REPO_ROOT}/build
-    # remove old flutter-bolt-dev blocks
+    cd "${REPO_ROOT}/build"
     awk -f - conf/local.conf >conf/local.conf.updated <<EOF
 /@START flutter-bolt-dev/    {DELETING="1"}
 /@END flutter-bolt-dev/      {DELETING="0"}
@@ -44,11 +43,11 @@ EOF
 
 fi
 
-export FLUTTER_BOLT_CONFIG=$(jq .config < ${REPO_ROOT}/package-configs/${FLUTTER_BOLT_NAME}.bolt.json | tr -d '"')
+export FLUTTER_BOLT_CONFIG="$(jq -r '.config' < "${REPO_ROOT}/package-configs/${FLUTTER_BOLT_NAME}.bolt.json")"
 
-ID=$(jq .id < ${REPO_ROOT}/package-configs/${FLUTTER_BOLT_CONFIG} | tr -d '"')
-VER=$(jq .version < ${REPO_ROOT}/package-configs/${FLUTTER_BOLT_CONFIG} | tr -d '"')
-export FLUTTER_OUTPUT_BOLT_NAME=${ID}+${VER}
+ID="$(jq -r '.id' < "${REPO_ROOT}/package-configs/${FLUTTER_BOLT_CONFIG}")"
+VER="$(jq -r '.version' < "${REPO_ROOT}/package-configs/${FLUTTER_BOLT_CONFIG}")"
+export FLUTTER_OUTPUT_BOLT_NAME="${ID}+${VER}"
 
 REMOVE_FROM_RM="RM_WORK_EXCLUDE:append = \" ${FLUTTER_APPLICATION_RECIPE} ${FLUTTER_APPLICATION_RECIPE}-bolt-image\""
 if ! grep -q "${REMOVE_FROM_RM}" ${REPO_ROOT}/build/conf/local.conf; then
