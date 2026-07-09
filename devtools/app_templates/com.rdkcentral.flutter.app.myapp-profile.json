@@ -6,7 +6,7 @@
   "packageType": "application",
   "entryPoint": "/usr/share/flutter/myapp/3.38.3/profile/",
   "dependencies": {
-    "com.rdkcentral.flutter.runtime.flutter-auto.v3_38_3-profile": "0.0.1"
+    "com.rdkcentral.flutter.runtime.flutter-auto-profile.v3_38_3": "0.0.1"
   },
   "permissions": [
     "urn:rdk:permission:internet",
