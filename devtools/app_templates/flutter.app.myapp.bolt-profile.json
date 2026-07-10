@@ -1,0 +1,6 @@
+{
+  "config": "com.rdkcentral.flutter.app.myapp-profile.json",
+  "bitbake": {
+    "image": "myapp-bolt-image-profile"
+  }
+}

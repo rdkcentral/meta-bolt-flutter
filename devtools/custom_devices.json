@@ -1,0 +1,35 @@
+{
+  "custom-devices": [
+    {
+      "id": "rdkdevice",
+      "label": "rdkdevice label",
+      "sdkNameAndVersion": "rdke",
+      "platform": null,
+      "enabled": true,
+      "ping": [
+        "bash",
+        "-c",
+        "exec ping -c 1 -w 1 \"$STB_IP\""
+      ],
+      "pingSuccessRegex": null,
+      "postBuild": null,
+      "install": [
+        "bash",
+        "-c",
+        "exec \"$REPO_ROOT/devtools/flutter_bolt_dev_container.sh\" makepush"
+      ],
+      "uninstall": [
+        "bash",
+        "-c",
+        "exec \"$REPO_ROOT/devtools/flutter_bolt_dev_container.sh\" ctrlc"
+      ],
+      "runDebug": [
+        "bash",
+        "-c",
+        "exec \"$REPO_ROOT/devtools/flutter_bolt_dev_container.sh\" debug"
+      ],
+      "forwardPortSuccessRegex": "Port forwarding success",
+      "screenshot": null
+    }
+  ]
+}
