@@ -4,9 +4,9 @@
   "versionName": "develop",
   "name": "Flutter Hello World",
   "packageType": "application",
-  "entryPoint": "/usr/share/flutter/flutter-samples-hello-world-app/3.38.3/release",
+  "entryPoint": "/usr/share/flutter/flutter-samples-hello-world-app/current/release/",
   "dependencies": {
-    "com.rdkcentral.flutter.runtime.flutter-auto.v3_38_3": "0.0.1"
+    "com.rdkcentral.flutter.runtime.flutter-auto": "0.0.1"
   },
   "permissions": [
     "urn:rdk:permission:internet",
@@ -14,6 +14,5 @@
     "urn:rdk:permission:thunder",
     "urn:rdk:permission:rialto"
   ],
-  "configuration": {
-  }
+  "configuration": {}
 }
