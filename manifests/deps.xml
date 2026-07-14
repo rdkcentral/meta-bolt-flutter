@@ -5,5 +5,5 @@
 
   <project remote="rdkcentral" name="meta-bolt-distro" upstream="main" revision="refs/tags/0.2.0" path="bolt"/>
   <project remote="clang" name="meta-clang" upstream="kirkstone-clang18" revision="ba32aef278cd7d0249cfe3c9e8319970f3018ff2" path="meta-clang"/>
-  <project remote="meta-flutter" name="meta-flutter" upstream="kirkstone" revision="META_FLUTTER_REVISION" path="meta-flutter"/>
+  <project remote="meta-flutter" name="meta-flutter" upstream="kirkstone" revision="3862298379929642b0356793c406d5d6aacbf7bb" path="meta-flutter"/>
 </manifest>
