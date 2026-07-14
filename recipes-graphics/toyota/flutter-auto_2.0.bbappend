@@ -9,10 +9,15 @@ SRC_URI:append = " \
 	file://0002-add-simple-shell-listener.patch"
 
 # waypp patches
+# Use a series-specific variant for 3.32 as waypp.h.in has a different
+# structure (no #ifndef guards) compared to the 3.35/3.38 version.
 SRC_URI:append = " \
     file://0001-waypp-compile-w-o-xdg-output-enabled.patch;striplevel=1;patchdir=third_party/waypp \
-    file://0002-waypp-add-simpleshell-protocol.patch;striplevel=1;patchdir=third_party/waypp \
     file://0003-waypp-compile-with-no-xdg-bd20d4db.patch;striplevel=1;patchdir=third_party/waypp"
+
+SRC_URI:append = " ${@'file://0002-waypp-add-simpleshell-protocol-3.32.patch;striplevel=1;patchdir=third_party/waypp' \
+    if d.getVar('BOLT_FLUTTER_SDK_SERIES') == '3.32' else \
+    'file://0002-waypp-add-simpleshell-protocol.patch;striplevel=1;patchdir=third_party/waypp'}"
 
 # --- add PACKAGECONFIG option for simple-shell
 PACKAGECONFIG[simple-shell] = "-DENABLE_SIMPLE_SHELL_CLIENT=ON,-DENABLE_SIMPLE_SHELL_CLIENT=OFF"

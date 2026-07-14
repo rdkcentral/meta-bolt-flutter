@@ -17,7 +17,83 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-test -f .env && source $_
+test -f .env && source .env
+
+# ---------------------------------------------------------------------------
+# Flutter version matrix
+# Usage: source setup-environment <BOLT_FLUTTER_SDK_SERIES>
+# Example: source setup-environment 3.38
+#          source setup-environment 3.35
+#
+# BOLT_FLUTTER_SDK_SERIES : short series identifier used to select:
+#   - the meta-flutter upstream revision to pin in manifests/deps.xml
+#   - the FLUTTER_SDK_TAG passed to meta-flutter recipes
+#   - the per-series bbappend include (flutter-engine-<series>.inc)
+#
+# NOTE: BOLT_FLUTTER_SDK_SERIES is mandatory — no default is assumed.
+# ---------------------------------------------------------------------------
+
+# Add new entries here when supporting a new flutter series.
+declare -A _FLUTTER_META_FLUTTER_REV=(
+    ["3.32"]="3862298379929642b0356793c406d5d6aacbf7bb"
+    ["3.35"]="f7087e6ea32dcd6eeaeb9ffdb84e2173e63c6eec"
+    ["3.38"]="50593f4a16f5c7cc8d646bd34b54ea57a28df803"
+)
+
+declare -A _FLUTTER_SDK_TAG=(
+    ["3.32"]="3.32.2"
+    ["3.35"]="3.35.7"
+    ["3.38"]="3.38.3"
+)
+
+# Series argument is mandatory
+if [[ -z "${1:-}" ]]; then
+    echo "ERROR: BOLT_FLUTTER_SDK_SERIES not specified."
+    echo "Usage: source setup-environment <series>"
+    echo "Supported series: ${!_FLUTTER_META_FLUTTER_REV[*]}"
+    return 1
+fi
+BOLT_FLUTTER_SDK_SERIES="$1"
+
+# Consume the series argument so $1 is not seen by the underlying
+# oe-init-build-env (called inside deps/bolt/setup-environment)
+# which would otherwise use it as the build directory name.
+shift
+
+if [[ -z "${_FLUTTER_META_FLUTTER_REV[$BOLT_FLUTTER_SDK_SERIES]:-}" ]]; then
+    echo "ERROR: Unsupported BOLT_FLUTTER_SDK_SERIES '${BOLT_FLUTTER_SDK_SERIES}'"
+    echo "Supported series: ${!_FLUTTER_META_FLUTTER_REV[*]}"
+    return 1
+fi
+
+META_FLUTTER_REV="${_FLUTTER_META_FLUTTER_REV[$BOLT_FLUTTER_SDK_SERIES]}"
+FLUTTER_SDK_TAG="${_FLUTTER_SDK_TAG[$BOLT_FLUTTER_SDK_SERIES]}"
+
+echo "Flutter SDK tag : ${FLUTTER_SDK_TAG}"
+echo "meta-flutter rev: ${META_FLUTTER_REV}"
+
+# Update the meta-flutter revision in manifests/deps.xml to pin the
+# matching upstream meta-flutter version for the requested series.
+BOLT_LAYER_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")")
+DEPS_XML="${BOLT_LAYER_DIR}/manifests/deps.xml"
+
+if [ -f "${DEPS_XML}" ]; then
+    if ! grep -q 'path="meta-flutter"' "${DEPS_XML}"; then
+        echo "ERROR: meta-flutter project entry not found in ${DEPS_XML}" >&2
+        return 1
+    fi
+    sed -i "/path=\"meta-flutter\"/s/revision=\"[^\"]*\"/revision=\"${META_FLUTTER_REV}\"/" "${DEPS_XML}"
+    echo "Updated meta-flutter revision to ${META_FLUTTER_REV} in ${DEPS_XML}"
+else
+    echo "WARNING: deps.xml not found at ${DEPS_XML}"
+fi
+
+# Export for BitBake - these are passed through to the bitbake environment
+export BOLT_FLUTTER_SDK_SERIES
+export FLUTTER_SDK_TAG
+export BB_ENV_PASSTHROUGH_ADDITIONS="${BB_ENV_PASSTHROUGH_ADDITIONS} BOLT_FLUTTER_SDK_SERIES FLUTTER_SDK_TAG"
+
+# ---------------------------------------------------------------------------
 
 BOLT_LAYER_SETUP_SCRIPT=$(realpath -se "${BASH_SOURCE[0]}")
 BOLT_SETUP_SCRIPT=deps/bolt/setup-environment
@@ -33,3 +109,8 @@ fi
 
 unset BOLT_SETUP_SCRIPT
 unset BOLT_LAYER_SETUP_SCRIPT
+unset _FLUTTER_META_FLUTTER_REV
+unset _FLUTTER_SDK_TAG
+unset META_FLUTTER_REV
+unset DEPS_XML
+unset BOLT_LAYER_DIR
