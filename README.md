@@ -83,12 +83,12 @@ bolt make flutter.runtime.flutter-auto.v3_38_3
 To add a new debug or profile Flutter application, create a mode-specific app recipe and image recipe. The app recipe selects the build mode by inheriting the matching class:
 
 ```
-require myapp_0.1.inc
+include myapp.inc
 inherit flutter-mode-debug
 ```
 
-For complete example of full set of debug/profile/release recipes and configurations check myapp template in devtools/app_templates.
+For a complete example of the full set of debug/profile/release recipes and configurations, see the `myapp` template in `devtools/app_templates/`.
 
-## flutter development container and flutter debugging tools support
+## Flutter development container and flutter debugging tools support
 
 A development container Dockerfile is provided in the `devtools` directory. The container provides the environment to build `meta-bolt-flutter` runtimes and applications, and is also required for Flutter debugging workflows such as hot reload. See `devtools/README.md` for detailed setup and usage instructions.
