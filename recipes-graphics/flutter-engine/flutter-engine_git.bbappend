@@ -1,4 +1,4 @@
-# BOLT_FLUTTER_SDK_SERIES is set by setup-environment (e.g. "3.38", "3.35").
+# BOLT_FLUTTER_SDK_SERIES is set by setup-environment (e.g. "3.38", "3.35", "3.32").
 # Add a new flutter-engine-<series>.inc for each new supported series.
 include ${THISDIR}/flutter-engine-${BOLT_FLUTTER_SDK_SERIES}.inc
 

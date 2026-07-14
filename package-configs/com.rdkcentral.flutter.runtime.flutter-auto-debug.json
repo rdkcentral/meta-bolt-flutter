@@ -1,15 +1,13 @@
 {
-  "id": "com.rdkcentral.flutter.runtime.flutter-auto-profile.v3_38_3",
+  "id": "com.rdkcentral.flutter.runtime.flutter-auto-debug",
   "version": "0.0.1",
   "versionName": "develop",
-  "name": "FlutterAutoRuntimeProfilev3_38_3",
+  "name": "FlutterAutoRuntimeDebug",
   "packageType": "runtime",
   "entryPoint": "/usr/bin/flutter-auto-bolt-debug.sh",
   "dependencies": {
     "com.rdkcentral.base": "0.2.0"
   },
-  "permissions": [
-  ],
-  "configuration": {
-  }
+  "permissions": [],
+  "configuration": {}
 }

@@ -1,15 +1,13 @@
 {
-  "id": "com.rdkcentral.flutter.runtime.flutter-auto.v3_38_3",
+  "id": "com.rdkcentral.flutter.runtime.flutter-auto",
   "version": "0.0.1",
   "versionName": "develop",
-  "name": "FlutterAutoRuntimev3_38_3",
+  "name": "FlutterAutoRuntime",
   "packageType": "runtime",
   "entryPoint": "/usr/bin/flutter-auto-bolt.sh",
   "dependencies": {
     "com.rdkcentral.base": "0.2.0"
   },
-  "permissions": [
-  ],
-  "configuration": {
-  }
+  "permissions": [],
+  "configuration": {}
 }
