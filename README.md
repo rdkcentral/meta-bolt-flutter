@@ -60,3 +60,35 @@ bolt push <sshuser@remoteip> com.rdkcentral.flutter.app.wonderous+0.1.0
 
 bolt run <sshuser@remoteip> com.rdkcentral.flutter.app.wonderous+0.1.0
 ```
+
+## Flutter runtime build modes
+
+Flutter runtime bolts are split by Flutter build mode. The release runtime uses the existing unsuffixed package name, while debug and profile use explicit suffixes:
+
+- `flutter.runtime.flutter-auto.v3_38_3`: release runtime, using `flutter-engine-release`.
+- `flutter.runtime.flutter-auto-debug.v3_38_3`: debug runtime, using `flutter-engine-debug`.
+- `flutter.runtime.flutter-auto-profile.v3_38_3`: profile runtime, using `flutter-engine-profile`.
+
+The Flutter engine artifacts are packaged separately as `flutter-engine-release`, `flutter-engine-debug`, and `flutter-engine-profile`. Runtime images install exactly one of those packages, so an application package must depend on the runtime bolt built for the same mode.
+
+Build (and later install) the runtime bolt for the mode you want to use:
+
+```
+bolt make flutter.runtime.flutter-auto-debug.v3_38_3
+bolt make flutter.runtime.flutter-auto-profile.v3_38_3
+# unsuffixed release version
+bolt make flutter.runtime.flutter-auto.v3_38_3
+```
+
+To add a new debug or profile Flutter application, create a mode-specific app recipe and image recipe. The app recipe selects the build mode by inheriting the matching class:
+
+```
+include myapp.inc
+inherit flutter-mode-debug
+```
+
+For a complete example of the full set of debug/profile/release recipes and configurations, see the `myapp` template in `devtools/app_templates/`.
+
+## Flutter development container and flutter debugging tools support
+
+A development container Dockerfile is provided in the `devtools` directory. The container provides the environment to build `meta-bolt-flutter` runtimes and applications, and is also required for Flutter debugging workflows such as hot reload. See `devtools/README.md` for detailed setup and usage instructions.
