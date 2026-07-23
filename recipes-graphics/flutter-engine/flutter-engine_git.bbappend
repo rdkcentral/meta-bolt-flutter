@@ -1,3 +1,7 @@
+# BOLT_FLUTTER_SDK_SERIES is set by setup-environment (e.g. "3.38", "3.35", "3.32").
+# Add a new flutter-engine-<series>.inc for each new supported series.
+include ${THISDIR}/flutter-engine-${BOLT_FLUTTER_SDK_SERIES}.inc
+
 # split the output into packages per flutter build mode
 PACKAGE_BEFORE_PN += "${PN}-debug ${PN}-profile ${PN}-release ${PN}-jit_release"
 

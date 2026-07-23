@@ -4,9 +4,9 @@
   "versionName": "develop",
   "name": "Wonderous",
   "packageType": "application",
-  "entryPoint": "/usr/share/flutter/gskinnerteam-flutter-wonderous-app-wonders/3.38.3/debug/",
+  "entryPoint": "/usr/share/flutter/gskinnerteam-flutter-wonderous-app-wonders/current/debug/",
   "dependencies": {
-    "com.rdkcentral.flutter.runtime.flutter-auto-debug.v3_38_3": "0.0.1"
+    "com.rdkcentral.flutter.runtime.flutter-auto-debug": "0.0.1"
   },
   "permissions": [
     "urn:rdk:permission:internet",
@@ -14,6 +14,5 @@
     "urn:rdk:permission:thunder",
     "urn:rdk:permission:rialto"
   ],
-  "configuration": {
-  }
+  "configuration": {}
 }
