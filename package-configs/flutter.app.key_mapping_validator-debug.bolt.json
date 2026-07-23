@@ -1,0 +1,6 @@
+{
+  "config": "com.rdkcentral.flutter.app.key_mapping_validator-debug.json",
+  "bitbake": {
+    "image": "flutter-key-mapping-validator-debug-bolt-image"
+  }
+}
