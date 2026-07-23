@@ -82,8 +82,11 @@ if [ -f "${DEPS_XML}" ]; then
         echo "ERROR: meta-flutter project entry not found in ${DEPS_XML}" >&2
         return 1
     fi
-    sed -i "/path=\"meta-flutter\"/s/revision=\"[^\"]*\"/revision=\"${META_FLUTTER_REV}\"/" "${DEPS_XML}"
-    echo "Updated meta-flutter revision to ${META_FLUTTER_REV} in ${DEPS_XML}"
+    current_rev=$(sed -n '/path="meta-flutter"/s/.*revision="\([^"]*\)".*/\1/p' "${DEPS_XML}")
+    if [[ "${current_rev}" != "${META_FLUTTER_REV}" ]]; then
+        sed -i "/path=\"meta-flutter\"/s/revision=\"[^\"]*\"/revision=\"${META_FLUTTER_REV}\"/" "${DEPS_XML}"
+        echo "Updated meta-flutter revision to ${META_FLUTTER_REV} in ${DEPS_XML}"
+    fi
 else
     echo "WARNING: deps.xml not found at ${DEPS_XML}"
 fi

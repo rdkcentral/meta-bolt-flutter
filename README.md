@@ -47,7 +47,7 @@ bolt make flutter.runtime.flutter-auto --install
 Flutter app recipes inherit the `flutter-bolt-app` bbclass which creates a `current` symlink inside the app rootfs pointing to the actual Flutter SDK version directory:
 
 ```
-/usr/share/flutter/<app-name>/current  ->  <FLUTTER_SDK_TAG>
+/usr/share/flutter/<app-name>/current  ->  <FLUTTER_SDK_VERSION>
 ```
 
 App bolt package configs use this stable `current` path as the entryPoint:
@@ -87,19 +87,19 @@ bolt run <sshuser@remoteip> com.rdkcentral.flutter.app.wonderous+0.1.0
 
 Flutter runtime bolts are split by Flutter build mode. The release runtime uses the existing unsuffixed package name, while debug and profile use explicit suffixes:
 
-- `flutter.runtime.flutter-auto.v3_38_3`: release runtime, using `flutter-engine-release`.
-- `flutter.runtime.flutter-auto-debug.v3_38_3`: debug runtime, using `flutter-engine-debug`.
-- `flutter.runtime.flutter-auto-profile.v3_38_3`: profile runtime, using `flutter-engine-profile`.
+- `flutter.runtime.flutter-auto`: release runtime, using `flutter-engine-release`.
+- `flutter.runtime.flutter-auto-debug`: debug runtime, using `flutter-engine-debug`.
+- `flutter.runtime.flutter-auto-profile`: profile runtime, using `flutter-engine-profile`.
 
 The Flutter engine artifacts are packaged separately as `flutter-engine-release`, `flutter-engine-debug`, and `flutter-engine-profile`. Runtime images install exactly one of those packages, so an application package must depend on the runtime bolt built for the same mode.
 
 Build (and later install) the runtime bolt for the mode you want to use:
 
 ```
-bolt make flutter.runtime.flutter-auto-debug.v3_38_3
-bolt make flutter.runtime.flutter-auto-profile.v3_38_3
+bolt make flutter.runtime.flutter-auto-debug
+bolt make flutter.runtime.flutter-auto-profile
 # unsuffixed release version
-bolt make flutter.runtime.flutter-auto.v3_38_3
+bolt make flutter.runtime.flutter-auto
 ```
 
 To add a new debug or profile Flutter application, create a mode-specific app recipe and image recipe. The app recipe selects the build mode by inheriting the matching class:
