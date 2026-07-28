@@ -21,6 +21,7 @@ PUBSPEC_IGNORE_LOCKFILE = "1"
 FLUTTER_APPLICATION_PATH = ""
 
 inherit flutter-app
+inherit flutter-bolt-app
 
 do_compile[network] = "1"
 
