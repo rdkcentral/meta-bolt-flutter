@@ -1,0 +1,533 @@
+Add drm_kms_egl evdev to Flutter physical/logical key mapping.
+
+Backported from upstream ivi-homescreen (Toyota Connected):
+https://github.com/toyota-connected/ivi-homescreen/commit/56cf4208ff0dd55441b1f17af4da606a61f29691
+
+Upstream-Status: Backport [https://github.com/toyota-connected/ivi-homescreen/commit/56cf4208ff0dd55441b1f17af4da606a61f29691]
+
+diff --git a/shell/input/drm_seat.cc b/shell/input/drm_seat.cc
+new file mode 100644
+index 00000000..a4014b9f
+--- /dev/null
++++ b/shell/input/drm_seat.cc
+@@ -0,0 +1,336 @@
++/*
++ * Copyright 2026 Toyota Connected North America
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++#include "input/drm_seat.h"
++
++#include <linux/input-event-codes.h>
++#include <poll.h>
++
++#include <algorithm>
++#include <cerrno>
++#include <cstring>
++#include <utility>
++#include <variant>
++
++#include "engine.h"
++#include "input/key_mapping.h"
++#include "libflutter_engine.h"
++#include "logging.h"
++#include "shell/platform/homescreen/flutter_desktop_engine_state.h"
++#include "shell/platform/homescreen/flutter_desktop_view_controller_state.h"
++
++namespace homescreen {
++
++namespace {
++
++constexpr int kPollTimeoutMs = 100;
++
++size_t FlutterTimestampMicros() {
++  return static_cast<size_t>(LibFlutterEngine->GetCurrentTime() / 1000);
++}
++
++int64_t MapMouseButton(uint32_t evdev_button) {
++  switch (evdev_button) {
++    case BTN_LEFT:
++      return kFlutterPointerButtonMousePrimary;
++    case BTN_RIGHT:
++      return kFlutterPointerButtonMouseSecondary;
++    case BTN_MIDDLE:
++      return kFlutterPointerButtonMouseMiddle;
++    case BTN_SIDE:
++      return kFlutterPointerButtonMouseBack;
++    case BTN_EXTRA:
++      return kFlutterPointerButtonMouseForward;
++    default:
++      return 0;
++  }
++}
++
++}  // namespace
++
++DrmSeat::DrmSeat(int32_t viewport_width, int32_t viewport_height)
++    : viewport_w_(viewport_width), viewport_h_(viewport_height) {
++  // Start the pointer in the middle of the viewport so the first hover is
++  // visible before the user moves the mouse.
++  pointer_x_ = viewport_w_ / 2.0;
++  pointer_y_ = viewport_h_ / 2.0;
++}
++
++DrmSeat::~DrmSeat() {
++  Stop();
++}
++
++void DrmSeat::SetViewControllerState(FlutterDesktopViewControllerState* state) {
++  state_.store(state, std::memory_order_release);
++}
++
++FLUTTER_API_SYMBOL(FlutterEngine) DrmSeat::CurrentEngine() const {
++  auto* state = state_.load(std::memory_order_acquire);
++  if (!state || !state->engine) {
++    return nullptr;
++  }
++  return state->engine->GetFlutterEngine();
++}
++
++bool DrmSeat::Start() {
++  if (seat_) {
++    return true;
++  }
++
++  auto opened = drm::input::Seat::open();
++  if (!opened) {
++    spdlog::error("[DrmSeat] libinput seat open failed: {}",
++                  opened.error().message());
++    return false;
++  }
++  seat_ = std::make_unique<drm::input::Seat>(std::move(*opened));
++  seat_->set_event_handler(
++      [this](const drm::input::InputEvent& ev) { HandleEvent(ev); });
++
++  stop_.store(false, std::memory_order_release);
++  thread_ = std::thread([this] { DispatchLoop(); });
++  spdlog::info("[DrmSeat] started");
++  return true;
++}
++
++void DrmSeat::Stop() {
++  stop_.store(true, std::memory_order_release);
++  if (thread_.joinable()) {
++    thread_.join();
++  }
++  seat_.reset();
++}
++
++void DrmSeat::DispatchLoop() {
++  const int fd = seat_->fd();
++  while (!stop_.load(std::memory_order_acquire)) {
++    pollfd pfd{};
++    pfd.fd = fd;
++    pfd.events = POLLIN;
++    const int r = poll(&pfd, 1, kPollTimeoutMs);
++    if (r < 0) {
++      if (errno == EINTR) {
++        continue;
++      }
++      spdlog::error("[DrmSeat] poll: {}", std::strerror(errno));
++      break;
++    }
++    if (r > 0 && (pfd.revents & POLLIN)) {
++      if (auto ok = seat_->dispatch(); !ok) {
++        spdlog::warn("[DrmSeat] dispatch: {}", ok.error().message());
++      }
++    }
++  }
++}
++
++void DrmSeat::HandleEvent(const drm::input::InputEvent& ev) {
++  std::visit(
++      [this](auto&& e) {
++        using T = std::decay_t<decltype(e)>;
++        if constexpr (std::is_same_v<T, drm::input::KeyboardEvent>) {
++          HandleKeyboard(e);
++        } else if constexpr (std::is_same_v<T, drm::input::PointerEvent>) {
++          std::visit(
++              [this](auto&& pe) {
++                using P = std::decay_t<decltype(pe)>;
++                if constexpr (std::is_same_v<P,
++                                             drm::input::PointerMotionEvent>) {
++                  HandlePointerMotion(pe);
++                } else if constexpr (std::is_same_v<
++                                         P, drm::input::PointerButtonEvent>) {
++                  HandlePointerButton(pe);
++                } else if constexpr (std::is_same_v<
++                                         P, drm::input::PointerAxisEvent>) {
++                  HandlePointerAxis(pe);
++                }
++              },
++              e);
++        } else if constexpr (std::is_same_v<T, drm::input::TouchEvent>) {
++          HandleTouch(e);
++        }
++        // SwitchEvent (lid / tablet-mode) is intentionally dropped.
++      },
++      ev);
++}
++
++void DrmSeat::HandleKeyboard(const drm::input::KeyboardEvent& ev) {
++  auto* state = state_.load(std::memory_order_acquire);
++  if (!state || !state->engine) {
++    return;
++  }
++
++  FlutterKeyEvent ke{};
++  ke.struct_size = sizeof(FlutterKeyEvent);
++  ke.timestamp = static_cast<double>(FlutterTimestampMicros());
++  ke.type = ev.pressed ? kFlutterKeyEventTypeDown : kFlutterKeyEventTypeUp;
++  ke.physical = keys::EvdevToPhysical(ev.key);
++  ke.logical = keys::DeriveLogicalKey(ev.utf8, ev.sym);
++  ke.character = ev.utf8[0] ? ev.utf8 : nullptr;
++  ke.synthesized = false;
++  ke.device_type = kFlutterKeyEventDeviceTypeKeyboard;
++
++  // DrmSeat runs on its own input thread; Engine::SendKeyEvent hops to the
++  // platform task runner when needed and guards LibFlutterEngine->SendKeyEvent.
++  state->engine->SendKeyEvent(ke);
++}
++
++void DrmSeat::HandlePointerMotion(const drm::input::PointerMotionEvent& ev) {
++  auto engine = CurrentEngine();
++  if (!engine) {
++    return;
++  }
++
++  pointer_x_ = std::clamp(pointer_x_ + ev.dx, 0.0,
++                          static_cast<double>(viewport_w_ - 1));
++  pointer_y_ = std::clamp(pointer_y_ + ev.dy, 0.0,
++                          static_cast<double>(viewport_h_ - 1));
++
++  FlutterPointerEvent pe[2];
++  size_t count = 0;
++  const auto ts = FlutterTimestampMicros();
++
++  if (!pointer_added_) {
++    pe[count] = FlutterPointerEvent{};
++    pe[count].struct_size = sizeof(FlutterPointerEvent);
++    pe[count].phase = kAdd;
++    pe[count].timestamp = ts;
++    pe[count].x = pointer_x_;
++    pe[count].y = pointer_y_;
++    pe[count].device = 0;
++    pe[count].device_kind = kFlutterPointerDeviceKindMouse;
++    pe[count].buttons = 0;
++    pointer_added_ = true;
++    ++count;
++  }
++
++  pe[count] = FlutterPointerEvent{};
++  pe[count].struct_size = sizeof(FlutterPointerEvent);
++  pe[count].phase = button_mask_ ? kMove : kHover;
++  pe[count].timestamp = ts;
++  pe[count].x = pointer_x_;
++  pe[count].y = pointer_y_;
++  pe[count].device = 0;
++  pe[count].device_kind = kFlutterPointerDeviceKindMouse;
++  pe[count].buttons = button_mask_;
++  ++count;
++
++  LibFlutterEngine->SendPointerEvent(engine, pe, count);
++}
++
++void DrmSeat::HandlePointerButton(const drm::input::PointerButtonEvent& ev) {
++  auto engine = CurrentEngine();
++  if (!engine) {
++    return;
++  }
++
++  const int64_t bit = MapMouseButton(ev.button);
++  if (bit == 0) {
++    return;
++  }
++  const int64_t prev_mask = button_mask_;
++  if (ev.pressed) {
++    button_mask_ |= bit;
++  } else {
++    button_mask_ &= ~bit;
++  }
++
++  FlutterPointerPhase phase;
++  if (ev.pressed) {
++    // A press while another button is already held becomes kMove; kDown is
++    // reserved for the first-button-down transition.
++    phase = (prev_mask == 0) ? kDown : kMove;
++  } else {
++    phase = (button_mask_ == 0) ? kUp : kMove;
++  }
++
++  FlutterPointerEvent pe{};
++  pe.struct_size = sizeof(FlutterPointerEvent);
++  pe.phase = phase;
++  pe.timestamp = FlutterTimestampMicros();
++  pe.x = pointer_x_;
++  pe.y = pointer_y_;
++  pe.device = 0;
++  pe.device_kind = kFlutterPointerDeviceKindMouse;
++  pe.buttons = button_mask_;
++
++  LibFlutterEngine->SendPointerEvent(engine, &pe, 1);
++}
++
++void DrmSeat::HandlePointerAxis(const drm::input::PointerAxisEvent& ev) {
++  auto engine = CurrentEngine();
++  if (!engine) {
++    return;
++  }
++
++  FlutterPointerEvent pe{};
++  pe.struct_size = sizeof(FlutterPointerEvent);
++  pe.phase = button_mask_ ? kMove : kHover;
++  pe.timestamp = FlutterTimestampMicros();
++  pe.x = pointer_x_;
++  pe.y = pointer_y_;
++  pe.device = 0;
++  pe.device_kind = kFlutterPointerDeviceKindMouse;
++  pe.buttons = button_mask_;
++  pe.signal_kind = kFlutterPointerSignalKindScroll;
++  pe.scroll_delta_x = ev.horizontal;
++  pe.scroll_delta_y = ev.vertical;
++
++  LibFlutterEngine->SendPointerEvent(engine, &pe, 1);
++}
++
++void DrmSeat::HandleTouch(const drm::input::TouchEvent& ev) {
++  // Frame is an atomic-batch delimiter; nothing to forward.
++  if (ev.type == drm::input::TouchEvent::Type::Frame) {
++    return;
++  }
++
++  auto engine = CurrentEngine();
++  if (!engine) {
++    return;
++  }
++
++  FlutterPointerPhase phase = kMove;
++  switch (ev.type) {
++    case drm::input::TouchEvent::Type::Down:
++      phase = kDown;
++      break;
++    case drm::input::TouchEvent::Type::Up:
++      phase = kUp;
++      break;
++    case drm::input::TouchEvent::Type::Motion:
++      phase = kMove;
++      break;
++    case drm::input::TouchEvent::Type::Cancel:
++      phase = kCancel;
++      break;
++    case drm::input::TouchEvent::Type::Frame:
++      return;
++  }
++
++  FlutterPointerEvent pe{};
++  pe.struct_size = sizeof(FlutterPointerEvent);
++  pe.phase = phase;
++  pe.timestamp = FlutterTimestampMicros();
++  pe.x = ev.x;
++  pe.y = ev.y;
++  pe.device = ev.slot;
++  pe.device_kind = kFlutterPointerDeviceKindTouch;
++  pe.buttons = 0;
++
++  LibFlutterEngine->SendPointerEvent(engine, &pe, 1);
++}
++
++}  // namespace homescreen
+diff --git a/shell/input/key_mapping.h b/shell/input/key_mapping.h
+new file mode 100644
+index 00000000..2e73da46
+--- /dev/null
++++ b/shell/input/key_mapping.h
+@@ -0,0 +1,178 @@
++/*
++ * Copyright 2026 Toyota Connected North America
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++
++// Mapping from Linux evdev KEY_* codes to Flutter's physical and logical
++// key encodings. Flutter's physical keys use a USB-HID-based scheme:
++//
++//   physical = 0x0007'0000 | usb_hid_usage_id   (keyboard/keypad page 0x07)
++//
++// Logical keys for printable characters use the Unicode code point of the
++// lowercase letter/symbol; non-printable keys use Flutter's own namespace
++// (0x0010'0000'0000 range). For practical correctness we derive logical
++// keys from the XKB-supplied UTF-8 character when available, and fall
++// through to a small non-printable table otherwise.
++
++#pragma once
++
++#include <cstdint>
++
++#include <linux/input-event-codes.h>
++
++namespace homescreen::keys {
++
++// USB HID keyboard/keypad page prefix.
++constexpr uint64_t kHidKeyboardPage = 0x00070000ULL;
++
++// Flutter's logical key namespace for non-printable keys.
++constexpr uint64_t kFlutterLogicalPlane = 0x0100000000ULL;
++
++// Convert a Linux evdev key code to a Flutter physical key ID.
++// Returns 0 for unmapped keys (the engine treats physical=0 as empty).
++inline uint64_t EvdevToPhysical(uint32_t evdev) {
++  // The table below covers the core 104-key US layout + F-keys + numpad +
++  // navigation + modifiers + multimedia. It is compiled from the USB HID
++  // Usage Tables (Keyboard/Keypad page 0x07) cross-referenced against
++  // linux/input-event-codes.h. Entries are sorted by evdev code.
++  //
++  // clang-format off
++  static constexpr struct { uint32_t evdev; uint16_t hid; } kMap[] = {
++    {KEY_ESC,         0x29},
++    {KEY_1,           0x1E}, {KEY_2,       0x1F}, {KEY_3,      0x20},
++    {KEY_4,           0x21}, {KEY_5,       0x22}, {KEY_6,      0x23},
++    {KEY_7,           0x24}, {KEY_8,       0x25}, {KEY_9,      0x26},
++    {KEY_0,           0x27},
++    {KEY_MINUS,       0x2D}, {KEY_EQUAL,   0x2E},
++    {KEY_BACKSPACE,   0x2A}, {KEY_TAB,     0x2B},
++    {KEY_Q,           0x14}, {KEY_W,       0x1A}, {KEY_E,      0x08},
++    {KEY_R,           0x15}, {KEY_T,       0x17}, {KEY_Y,      0x1C},
++    {KEY_U,           0x18}, {KEY_I,       0x0C}, {KEY_O,      0x12},
++    {KEY_P,           0x13},
++    {KEY_LEFTBRACE,   0x2F}, {KEY_RIGHTBRACE, 0x30},
++    {KEY_ENTER,       0x28},
++    {KEY_LEFTCTRL,    0xE0},
++    {KEY_A,           0x04}, {KEY_S,       0x16}, {KEY_D,      0x07},
++    {KEY_F,           0x09}, {KEY_G,       0x0A}, {KEY_H,      0x0B},
++    {KEY_J,           0x0D}, {KEY_K,       0x0E}, {KEY_L,      0x0F},
++    {KEY_SEMICOLON,   0x33}, {KEY_APOSTROPHE, 0x34},
++    {KEY_GRAVE,       0x35},
++    {KEY_LEFTSHIFT,   0xE1},
++    {KEY_BACKSLASH,   0x31},
++    {KEY_Z,           0x1D}, {KEY_X,       0x1B}, {KEY_C,      0x06},
++    {KEY_V,           0x19}, {KEY_B,       0x05}, {KEY_N,      0x11},
++    {KEY_M,           0x10},
++    {KEY_COMMA,       0x36}, {KEY_DOT,     0x37}, {KEY_SLASH,  0x38},
++    {KEY_RIGHTSHIFT,  0xE5},
++    {KEY_KPASTERISK,  0x55},
++    {KEY_LEFTALT,     0xE2},
++    {KEY_SPACE,       0x2C},
++    {KEY_CAPSLOCK,    0x39},
++    {KEY_F1,          0x3A}, {KEY_F2,      0x3B}, {KEY_F3,     0x3C},
++    {KEY_F4,          0x3D}, {KEY_F5,      0x3E}, {KEY_F6,     0x3F},
++    {KEY_F7,          0x40}, {KEY_F8,      0x41}, {KEY_F9,     0x42},
++    {KEY_F10,         0x43},
++    {KEY_NUMLOCK,     0x53}, {KEY_SCROLLLOCK, 0x47},
++    {KEY_KP7,         0x5F}, {KEY_KP8,     0x60}, {KEY_KP9,    0x61},
++    {KEY_KPMINUS,     0x56},
++    {KEY_KP4,         0x5C}, {KEY_KP5,     0x5D}, {KEY_KP6,    0x5E},
++    {KEY_KPPLUS,      0x57},
++    {KEY_KP1,         0x59}, {KEY_KP2,     0x5A}, {KEY_KP3,    0x5B},
++    {KEY_KP0,         0x62}, {KEY_KPDOT,   0x63},
++    {KEY_F11,         0x44}, {KEY_F12,     0x45},
++    {KEY_KPENTER,     0x58},
++    {KEY_RIGHTCTRL,   0xE4},
++    {KEY_KPSLASH,     0x54},
++    {KEY_SYSRQ,       0x46},
++    {KEY_RIGHTALT,    0xE6},
++    {KEY_HOME,        0x4A}, {KEY_UP,      0x52},
++    {KEY_PAGEUP,      0x4B}, {KEY_LEFT,    0x50},
++    {KEY_RIGHT,       0x4F}, {KEY_END,     0x4D},
++    {KEY_DOWN,        0x51}, {KEY_PAGEDOWN, 0x4E},
++    {KEY_INSERT,      0x49}, {KEY_DELETE,  0x4C},
++    {KEY_PAUSE,       0x48},
++    {KEY_LEFTMETA,    0xE3}, {KEY_RIGHTMETA, 0xE7},
++    {KEY_COMPOSE,     0x65},
++    // F13–F24
++    {KEY_F13,         0x68}, {KEY_F14,     0x69}, {KEY_F15,    0x6A},
++    {KEY_F16,         0x6B}, {KEY_F17,     0x6C}, {KEY_F18,    0x6D},
++    {KEY_F19,         0x6E}, {KEY_F20,     0x6F}, {KEY_F21,    0x70},
++    {KEY_F22,         0x71}, {KEY_F23,     0x72}, {KEY_F24,    0x73},
++    // Misc
++    {KEY_102ND,       0x64},
++    {KEY_KPEQUAL,     0x67},
++  };
++  // clang-format on
++
++  for (const auto& [ev, hid] : kMap) {
++    if (ev == evdev) {
++      return kHidKeyboardPage | hid;
++    }
++  }
++  return 0;
++}
++
++// Decode the first UTF-8 code point from a null-terminated string.
++// Returns 0 on empty/invalid input.
++inline uint32_t Utf8ToCodePoint(const char* s) {
++  if (!s || !s[0]) {
++    return 0;
++  }
++  const auto c0 = static_cast<uint8_t>(s[0]);
++  if (c0 < 0x80) {
++    return c0;
++  }
++  if ((c0 & 0xE0) == 0xC0 && s[1]) {
++    return (static_cast<uint32_t>(c0 & 0x1F) << 6) |
++           (static_cast<uint32_t>(s[1]) & 0x3F);
++  }
++  if ((c0 & 0xF0) == 0xE0 && s[1] && s[2]) {
++    return (static_cast<uint32_t>(c0 & 0x0F) << 12) |
++           ((static_cast<uint32_t>(s[1]) & 0x3F) << 6) |
++           (static_cast<uint32_t>(s[2]) & 0x3F);
++  }
++  if ((c0 & 0xF8) == 0xF0 && s[1] && s[2] && s[3]) {
++    return (static_cast<uint32_t>(c0 & 0x07) << 18) |
++           ((static_cast<uint32_t>(s[1]) & 0x3F) << 12) |
++           ((static_cast<uint32_t>(s[2]) & 0x3F) << 6) |
++           (static_cast<uint32_t>(s[3]) & 0x3F);
++  }
++  return 0;
++}
++
++// Derive the Flutter logical key from the keyboard event. Printable
++// characters use their Unicode code point (lowercased for Latin letters
++// so the logical key is shift-invariant). Non-printable keys fall through
++// to the XKB keysym, which the Flutter framework can still match against
++// `LogicalKeyboardKey` constants (they're derived from the same Unicode /
++// XKB namespace in the framework's key_data generator).
++inline uint64_t DeriveLogicalKey(const char* utf8, uint32_t xkb_sym) {
++  const uint32_t cp = Utf8ToCodePoint(utf8);
++  if (cp >= 0x20 && cp != 0x7F) {
++    // Printable. Lowercase Latin letters so Shift+A and A share the
++    // same logical key (Flutter convention).
++    if (cp >= 'A' && cp <= 'Z') {
++      return cp + ('a' - 'A');
++    }
++    return cp;
++  }
++  // Non-printable: pass the XKB keysym. Flutter's LogicalKeyboardKey
++  // constants for non-printable keys are numerically identical to the
++  // XKB keysyms in the 0xFF00–0xFFFF range (BackSpace, Tab, Return,
++  // Escape, Delete, arrows, Home/End/PgUp/PgDn, F1–F24, modifiers).
++  // The framework resolves them at the Dart layer.
++  return xkb_sym;
++}
++
++}  // namespace homescreen::keys

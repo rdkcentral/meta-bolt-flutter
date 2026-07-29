@@ -6,7 +6,9 @@ SRC_URI:append = " file://flutter-auto-bolt-debug.sh"
 # ivi-homescreen patches
 SRC_URI:append = " \
 	file://0001-fix-xdg-client-ifdef.patch \
-	file://0002-add-simple-shell-listener.patch"
+	file://0002-add-simple-shell-listener.patch \
+	file://0003-drm-kms-egl-evdev-flutter-key-mapping.patch \
+	file://0004-wayland-rcu-keydata-mapping.patch"
 
 # waypp patches
 # Use a series-specific variant for 3.32 as waypp.h.in has a different
@@ -34,6 +36,7 @@ EXTRA_OECMAKE += "\
     -DBUILD_IVI_HOME_SCREEN_PLUGINS=OFF \
     -DBUILD_PLUGINS=OFF \
     -DENABLE_DBUS=OFF \
+    -DRDK_USE_FLUTTER_KEYDATA=ON \
 "
 
 FILES:${PN}:append = " ${bindir}/flutter-auto-bolt.sh"
