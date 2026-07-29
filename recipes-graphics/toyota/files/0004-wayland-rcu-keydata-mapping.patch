@@ -1,0 +1,748 @@
+Add Wayland RCU KeyData mapping on top of evdev to Flutter keys.
+
+diff --git a/cmake/options.cmake b/cmake/options.cmake
+index ba6f340e..069bb7a9 100644
+--- a/cmake/options.cmake
++++ b/cmake/options.cmake
+@@ -96,6 +96,10 @@ endif ()
+ 
+ option(DEBUG_PLATFORM_MESSAGES "Debug platform messages" OFF)
+ 
++# Send KeyData via FlutterEngineSendKeyEvent (with flutter/keyevent companion).
++option(RDK_USE_FLUTTER_KEYDATA "Use FlutterEngineSendKeyEvent for framework keys" ON)
++MESSAGE(STATUS "RDK Flutter KeyData ...... ${RDK_USE_FLUTTER_KEYDATA}")
++
+ #
+ # Crash Handler
+ #
+diff --git a/shell/engine.cc b/shell/engine.cc
+index bb250f3a..cf263ca8 100644
+--- a/shell/engine.cc
++++ b/shell/engine.cc
+@@ -522,6 +522,38 @@ void Engine::SendPointerEvents() {
+   }
+ }
+ 
++void Engine::SendKeyEvent(const FlutterKeyEvent& event) {
++  if (!m_running || !m_flutter_engine || !LibFlutterEngine->SendKeyEvent) {
++    if (!LibFlutterEngine->SendKeyEvent) {
++      spdlog::warn("({}) FlutterEngineSendKeyEvent not available", m_index);
++    }
++    return;
++  }
++
++  FlutterKeyEvent queued_event = event;
++  std::string character_storage;
++  if (event.character != nullptr) {
++    character_storage = event.character;
++    queued_event.character = character_storage.c_str();
++  }
++
++  FlutterEngineResult result;
++  if (!m_platform_task_runner->IsThreadEqual(pthread_self())) {
++    auto future = m_platform_task_runner->QueueSendKeyEvent(
++        queued_event, std::move(character_storage));
++    future.wait();
++    result = future.get();
++  } else {
++    result = LibFlutterEngine->SendKeyEvent(m_flutter_engine, &queued_event,
++                                            nullptr, nullptr);
++  }
++
++  if (result != kSuccess) {
++    spdlog::warn("({}) FlutterEngineSendKeyEvent failed: {}", m_index,
++                 static_cast<int>(result));
++  }
++}
++
+ FlutterEngineAOTData Engine::LoadAotData(const std::string& bundle_path) const {
+   std::filesystem::path aot_data_path(bundle_path);
+   aot_data_path /= kBundleAot;
+diff --git a/shell/engine.h b/shell/engine.h
+index aa961892..cc7ab5ee 100644
+--- a/shell/engine.h
++++ b/shell/engine.h
+@@ -297,6 +297,11 @@ class Engine {
+    */
+   void SendPointerEvents();
+ 
++  /**
++   * @brief Send a key event to the Flutter engine (KeyData path).
++   */
++  void SendKeyEvent(const FlutterKeyEvent& event);
++
+   /**
+    * @brief Activate system cursor
+    * @param[in] device No use
+diff --git a/shell/input/key_mapping.h b/shell/input/key_mapping.h
+index 2e73da46..5e4f0b46 100644
+--- a/shell/input/key_mapping.h
++++ b/shell/input/key_mapping.h
+@@ -24,6 +24,9 @@
+ // (0x0010'0000'0000 range). For practical correctness we derive logical
+ // keys from the XKB-supplied UTF-8 character when available, and fall
+ // through to a small non-printable table otherwise.
++//
++// RCU extensions: kRcuMap (evdev → logical + name). Unmapped physicals use
++// custom plane 0x20 | xkb_scancode. Requires correct WM outbound evdev.
+ 
+ #pragma once
+ 
+@@ -39,6 +42,15 @@ constexpr uint64_t kHidKeyboardPage = 0x00070000ULL;
+ // Flutter's logical key namespace for non-printable keys.
+ constexpr uint64_t kFlutterLogicalPlane = 0x0100000000ULL;
+ 
++// Custom platform physical plane for keys not in kMap (gen_keycodes 0x20–0x2F).
++constexpr uint64_t kRdkCustomPhysicalPlane = 0x2000000000ULL;
++
++// Color codes as delivered by WM KEYMAP_OUT (WAYLAND_KEY_*).
++constexpr uint32_t kRdkEvdevYellow = 398;  // 0x18e
++constexpr uint32_t kRdkEvdevBlue = 399;    // 0x18f
++constexpr uint32_t kRdkEvdevRed = 400;     // 0x190
++constexpr uint32_t kRdkEvdevGreen = 401;   // 0x191
++
+ // Convert a Linux evdev key code to a Flutter physical key ID.
+ // Returns 0 for unmapped keys (the engine treats physical=0 as empty).
+ inline uint64_t EvdevToPhysical(uint32_t evdev) {
+@@ -135,18 +147,18 @@ inline uint32_t Utf8ToCodePoint(const char* s) {
+   }
+   if ((c0 & 0xE0) == 0xC0 && s[1]) {
+     return (static_cast<uint32_t>(c0 & 0x1F) << 6) |
+-           (static_cast<uint32_t>(s[1]) & 0x3F);
++           (static_cast<uint32_t>(static_cast<uint8_t>(s[1])) & 0x3F);
+   }
+   if ((c0 & 0xF0) == 0xE0 && s[1] && s[2]) {
+     return (static_cast<uint32_t>(c0 & 0x0F) << 12) |
+-           ((static_cast<uint32_t>(s[1]) & 0x3F) << 6) |
+-           (static_cast<uint32_t>(s[2]) & 0x3F);
++           ((static_cast<uint32_t>(static_cast<uint8_t>(s[1])) & 0x3F) << 6) |
++           (static_cast<uint32_t>(static_cast<uint8_t>(s[2])) & 0x3F);
+   }
+   if ((c0 & 0xF8) == 0xF0 && s[1] && s[2] && s[3]) {
+     return (static_cast<uint32_t>(c0 & 0x07) << 18) |
+-           ((static_cast<uint32_t>(s[1]) & 0x3F) << 12) |
+-           ((static_cast<uint32_t>(s[2]) & 0x3F) << 6) |
+-           (static_cast<uint32_t>(s[3]) & 0x3F);
++           ((static_cast<uint32_t>(static_cast<uint8_t>(s[1])) & 0x3F) << 12) |
++           ((static_cast<uint32_t>(static_cast<uint8_t>(s[2])) & 0x3F) << 6) |
++           (static_cast<uint32_t>(static_cast<uint8_t>(s[3])) & 0x3F);
+   }
+   return 0;
+ }
+@@ -175,4 +187,75 @@ inline uint64_t DeriveLogicalKey(const char* utf8, uint32_t xkb_sym) {
+   return xkb_sym;
+ }
+ 
++// RCU: Wayland/Linux evdev → logical KeyData ID + display name.
++struct RcuMapEntry {
++  uint32_t evdev;
++  uint64_t logical;
++  const char* name;
++};
++
++// clang-format off
++inline constexpr RcuMapEntry kRcuMap[] = {
++  {KEY_TV,           0x100000d49ULL, "Live TV"},
++  {KEY_ADDRESSBOOK,  0x100000d34ULL, "Profile"},
++  {KEY_SEARCH,       0x100000e06ULL, "Voice Search"},
++  {kRdkEvdevRed,     0x100000d0cULL, "Red"},
++  {kRdkEvdevGreen,   0x100000d0dULL, "Green"},
++  {kRdkEvdevYellow,  0x100000d0eULL, "Yellow"},
++  {kRdkEvdevBlue,    0x100000d0fULL, "Blue"},
++  {KEY_PROGRAM,      0x100000d22ULL, "Guide"},
++  {KEY_CONTEXT_MENU, 0x100070065ULL, "ContextMenu"},
++  {KEY_HOMEPAGE,     0x10007004aULL, "Home"},
++  {KEY_POWER,        0x100070066ULL, "Power"},
++  {KEY_RECORD,       0x1008ff1cULL, "Record"},
++  {KEY_PLAYPAUSE,    0x1008ff14ULL, "PlayPause"},
++  {KEY_REWIND,       0x1008ff3eULL, "Rewind"},
++  {KEY_FASTFORWARD,  0x1008ff97ULL, "FastForward"},
++  {KEY_CHANNELUP,    0x1008ff5eULL, "ChannelUp"},
++  {KEY_CHANNELDOWN,  0x1008ff56ULL, "ChannelDown"},
++};
++// clang-format on
++
++inline const RcuMapEntry* LookupRcu(uint32_t evdev) {
++  for (const auto& entry : kRcuMap) {
++    if (entry.evdev == evdev) {
++      return &entry;
++    }
++  }
++  return nullptr;
++}
++
++inline uint64_t DeriveLogicalKey(uint32_t evdev,
++                                 const char* utf8,
++                                 uint32_t xkb_sym) {
++  if (const auto* rcu = LookupRcu(evdev)) {
++    return rcu->logical;
++  }
++  return DeriveLogicalKey(utf8, xkb_sym);
++}
++
++// XKB keysym for the legacy flutter/keyevent channel.
++inline uint32_t ForwardKeysym(uint32_t /*evdev*/,
++                              uint32_t xkb_sym,
++                              uint64_t /*derived_logical*/) {
++  return xkb_sym;
++}
++
++inline uint64_t EvdevToFlutterPhysical(uint32_t evdev,
++                                       uint32_t xkb_scancode,
++                                       uint32_t /*xkb_sym*/) {
++  const uint64_t physical = EvdevToPhysical(evdev);
++  if (physical != 0) {
++    return physical;
++  }
++  return kRdkCustomPhysicalPlane | xkb_scancode;
++}
++
++inline const char* DisplayName(uint32_t evdev, uint64_t /*logical*/) {
++  if (const auto* rcu = LookupRcu(evdev)) {
++    return rcu->name;
++  }
++  return "";
++}
++
+ }  // namespace homescreen::keys
+diff --git a/shell/platform/homescreen/CMakeLists.txt b/shell/platform/homescreen/CMakeLists.txt
+index 4dbb91b7..b6d299f7 100644
+--- a/shell/platform/homescreen/CMakeLists.txt
++++ b/shell/platform/homescreen/CMakeLists.txt
+@@ -45,6 +45,10 @@ if (ACCESSKIT_FOUND)
+     )
+ endif ()
+ 
++if (RDK_USE_FLUTTER_KEYDATA)
++    target_compile_definitions(platform_homescreen PUBLIC RDK_USE_FLUTTER_KEYDATA)
++endif ()
++
+ if (ENABLE_PLUGINS)
+ 
+     if (POLICY CMP0076)
+diff --git a/shell/platform/homescreen/flutter_desktop.cc b/shell/platform/homescreen/flutter_desktop.cc
+index 92be5701..138a5a76 100644
+--- a/shell/platform/homescreen/flutter_desktop.cc
++++ b/shell/platform/homescreen/flutter_desktop.cc
+@@ -405,10 +405,9 @@ void KeyCallback(FlutterDesktopViewControllerState* view_state,
+                  bool released,
+                  xkb_keysym_t keysym,
+                  uint32_t xkb_scancode,
+-                 const uint32_t modifiers) {
+-  spdlog::debug("KeyCallback: released: {}, keysym: {}, xkb_scancode: {}",
+-                released, keysym, xkb_scancode);
++                 const uint32_t modifiers,
++                 const flutter::KeyboardHookMetadata& meta) {
+   for (const auto& handler : view_state->keyboard_hook_handlers) {
+-    handler->KeyboardHook(released, keysym, xkb_scancode, modifiers);
++    handler->KeyboardHook(released, keysym, xkb_scancode, modifiers, meta);
+   }
+ }
+diff --git a/shell/platform/homescreen/key_event_handler.cc b/shell/platform/homescreen/key_event_handler.cc
+index 6357210d..a39c5323 100644
+--- a/shell/platform/homescreen/key_event_handler.cc
++++ b/shell/platform/homescreen/key_event_handler.cc
+@@ -4,7 +4,11 @@
+ 
+ #include "shell/platform/homescreen/key_event_handler.h"
+ 
++#include "engine.h"
+ #include "flutter/shell/platform/common/json_message_codec.h"
++#include "flutter_desktop_view_controller_state.h"
++#include "libflutter_engine.h"
++#include "spdlog/spdlog.h"
+ #include "view/flutter_view.h"
+ 
+ static constexpr char kChannelName[] = "flutter/keyevent";
+@@ -25,33 +29,104 @@ static constexpr char kKeyDown[] = "keydown";
+ 
+ namespace flutter {
+ 
+-KeyEventHandler::KeyEventHandler(flutter::BinaryMessenger* messenger)
++namespace {
++
++std::string KeysymToUtf8(xkb_keysym_t keysym) {
++  char utf8[16] = {};
++  const int len = xkb_keysym_to_utf8(keysym, utf8, sizeof(utf8));
++  if (len <= 0) {
++    return {};
++  }
++  return std::string(utf8, static_cast<size_t>(len));
++}
++
++std::string CharacterForKeyEvent(xkb_keysym_t keysym,
++                                 const KeyboardHookMetadata& meta) {
++  if (meta.utf8 != nullptr && meta.utf8[0] != '\0') {
++    return meta.utf8;
++  }
++  return KeysymToUtf8(keysym);
++}
++
++}  // namespace
++
++KeyEventHandler::KeyEventHandler(flutter::BinaryMessenger* messenger,
++                                 ::FlutterDesktopViewControllerState* view_state)
+     : channel_(
+           std::make_unique<flutter::BasicMessageChannel<rapidjson::Document>>(
+               messenger,
+               kChannelName,
+-              &flutter::JsonMessageCodec::GetInstance())) {}
++              &flutter::JsonMessageCodec::GetInstance())),
++      view_state_(view_state) {
++}
+ 
+ KeyEventHandler::~KeyEventHandler() = default;
+ 
+ void KeyEventHandler::CharHook(unsigned int /* code_point */) {}
+ 
+-void KeyEventHandler::KeyboardHook(bool released,
+-                                   xkb_keysym_t keysym,
+-                                   uint32_t xkb_scancode,
+-                                   uint32_t modifiers) {
+-  // NOLINTNEXTLINE(clang-analyzer-core.NullDereference)
++#if defined(RDK_USE_FLUTTER_KEYDATA)
++void KeyEventHandler::SendFlutterKeyData(bool released,
++                                         xkb_keysym_t keysym,
++                                         const KeyboardHookMetadata& meta) {
++  if (view_state_ == nullptr || view_state_->engine == nullptr) {
++    spdlog::warn("[RDK_KEYDATA] engine not ready, dropping key");
++    return;
++  }
++
++  FlutterKeyEvent event{};
++  event.struct_size = sizeof(FlutterKeyEvent);
++  event.timestamp =
++      static_cast<double>(LibFlutterEngine->GetCurrentTime()) / 1000.0;
++  event.physical = meta.physical;
++  event.logical = meta.logical;
++  event.synthesized = false;
++  event.device_type = kFlutterKeyEventDeviceTypeKeyboard;
++
++  if (released) {
++    event.type = kFlutterKeyEventTypeUp;
++    event.character = nullptr;
++    character_buffer_.clear();
++  } else if (meta.is_repeat) {
++    event.type = kFlutterKeyEventTypeRepeat;
++    character_buffer_ = CharacterForKeyEvent(keysym, meta);
++    event.character =
++        character_buffer_.empty() ? nullptr : character_buffer_.c_str();
++  } else {
++    event.type = kFlutterKeyEventTypeDown;
++    character_buffer_ = CharacterForKeyEvent(keysym, meta);
++    event.character =
++        character_buffer_.empty() ? nullptr : character_buffer_.c_str();
++  }
++
++  // KeyboardHook runs on the Wayland event thread; never call
++  // FlutterEngineSendKeyEvent / LibFlutterEngine->SendKeyEvent directly.
++  // Engine::SendKeyEvent applies running/fn-ptr guards and hops to the
++  // platform task runner when needed.
++  if (view_state_->engine->GetPlatformTaskRunner() == nullptr) {
++    spdlog::warn("[RDK_KEYDATA] platform task runner missing, dropping key");
++    return;
++  }
++
++  view_state_->engine->SendKeyEvent(event);
++}
++#endif
++
++void KeyEventHandler::SendLegacyKeyEvent(bool released,
++                                         xkb_keysym_t keysym,
++                                         uint32_t xkb_scancode,
++                                         uint32_t modifiers) {
+   rapidjson::Document event(rapidjson::kObjectType);
+   auto& allocator = event.GetAllocator();
+-  event.AddMember(kKeyCodeKey, keysym, allocator);
++  event.AddMember(kKeyCodeKey, static_cast<uint32_t>(keysym), allocator);
+   event.AddMember(kKeyMapKey, kLinuxKeyMap, allocator);
+   event.AddMember(kToolkitKey, kValueToolkitGtk, allocator);
+   event.AddMember(kScanCodeKey, xkb_scancode, allocator);
+   event.AddMember(kModifiersKey, modifiers, allocator);
+ 
+   const uint32_t utf32_code = xkb_keysym_to_utf32(keysym);
+-  if (utf32_code)
++  if (utf32_code) {
+     event.AddMember(kUnicodeScalarValues, utf32_code, allocator);
++  }
+   if (released) {
+     event.AddMember(kTypeKey, kKeyUp, allocator);
+   } else {
+@@ -60,4 +135,18 @@ void KeyEventHandler::KeyboardHook(bool released,
+ 
+   channel_->Send(event);
+ }
++
++void KeyEventHandler::KeyboardHook(bool released,
++                                   xkb_keysym_t keysym,
++                                   uint32_t xkb_scancode,
++                                   uint32_t modifiers,
++                                   const KeyboardHookMetadata& meta) {
++#if defined(RDK_USE_FLUTTER_KEYDATA)
++  // KeyData plus flutter/keyevent — KeyEventManager requires both (Flutter #132433).
++  SendFlutterKeyData(released, keysym, meta);
++  SendLegacyKeyEvent(released, keysym, xkb_scancode, modifiers);
++#else
++  SendLegacyKeyEvent(released, keysym, xkb_scancode, modifiers);
++#endif
++}
+ }  // namespace flutter
+diff --git a/shell/platform/homescreen/key_event_handler.h b/shell/platform/homescreen/key_event_handler.h
+index eaaf7b0f..adb7d0fc 100644
+--- a/shell/platform/homescreen/key_event_handler.h
++++ b/shell/platform/homescreen/key_event_handler.h
+@@ -6,6 +6,7 @@
+ #define FLUTTER_SHELL_PLATFORM_DESKTOP_KEY_EVENT_HANDLER_H
+ 
+ #include <memory>
++#include <string>
+ 
+ #include "rapidjson/rapidjson.h"
+ 
+@@ -14,6 +15,8 @@
+ #include "rapidjson/document.h"
+ #include "shell/platform/homescreen/keyboard_hook_handler.h"
+ 
++struct FlutterDesktopViewControllerState;
++
+ namespace flutter {
+ 
+ // Implements a KeyboardHookHandler
+@@ -21,7 +24,8 @@ namespace flutter {
+ // Handles key events and forwards them to the Flutter engine.
+ class KeyEventHandler final : public KeyboardHookHandler {
+  public:
+-  explicit KeyEventHandler(flutter::BinaryMessenger* messenger);
++  KeyEventHandler(flutter::BinaryMessenger* messenger,
++                  ::FlutterDesktopViewControllerState* view_state);
+ 
+   ~KeyEventHandler() override;
+ 
+@@ -29,14 +33,28 @@ class KeyEventHandler final : public KeyboardHookHandler {
+   void KeyboardHook(bool released,
+                     xkb_keysym_t keysym,
+                     uint32_t xkb_scancode,
+-                    uint32_t modifiers) override;
++                    uint32_t modifiers,
++                    const KeyboardHookMetadata& meta) override;
+ 
+   // |KeyboardHookHandler|
+   void CharHook(unsigned int code_point) override;
+ 
+  private:
++#if defined(RDK_USE_FLUTTER_KEYDATA)
++  void SendFlutterKeyData(bool released,
++                          xkb_keysym_t keysym,
++                          const KeyboardHookMetadata& meta);
++#endif
++
++  void SendLegacyKeyEvent(bool released,
++                          xkb_keysym_t keysym,
++                          uint32_t xkb_scancode,
++                          uint32_t modifiers);
++
+   // The Flutter system channel for key event messages.
+   std::unique_ptr<flutter::BasicMessageChannel<rapidjson::Document>> channel_;
++  ::FlutterDesktopViewControllerState* view_state_;
++  std::string character_buffer_;
+ };
+ 
+ }  // namespace flutter
+diff --git a/shell/platform/homescreen/keyboard_hook_handler.h b/shell/platform/homescreen/keyboard_hook_handler.h
+index 1f938bed..742761ac 100644
+--- a/shell/platform/homescreen/keyboard_hook_handler.h
++++ b/shell/platform/homescreen/keyboard_hook_handler.h
+@@ -12,7 +12,16 @@
+ 
+ namespace flutter {
+ 
+-struct FlutterDesktopViewControllerState;
++// RDK key metadata from display.cc (evdev, Flutter logical/physical, display name).
++struct KeyboardHookMetadata {
++  uint32_t evdev = 0;
++  uint64_t logical = 0;
++  uint64_t physical = 0;
++  const char* name = "";
++  // UTF-8 from xkb_state_key_get_utf8(); valid only for the synchronous hook call.
++  const char* utf8 = nullptr;
++  bool is_repeat = false;
++};
+ 
+ // Abstract class for handling keyboard input events.
+ class KeyboardHookHandler {
+@@ -23,7 +32,8 @@ class KeyboardHookHandler {
+   virtual void KeyboardHook(bool released,
+                             xkb_keysym_t keysym,
+                             uint32_t xkb_scancode,
+-                            uint32_t modifiers) = 0;
++                            uint32_t modifiers,
++                            const KeyboardHookMetadata& meta) = 0;
+ 
+   // A function for hooking into unicode code point input.
+   virtual void CharHook(unsigned int code_point) = 0;
+diff --git a/shell/platform/homescreen/text_input_plugin.cc b/shell/platform/homescreen/text_input_plugin.cc
+index 50fcaba0..8f19e3a5 100644
+--- a/shell/platform/homescreen/text_input_plugin.cc
++++ b/shell/platform/homescreen/text_input_plugin.cc
+@@ -49,7 +49,8 @@ void TextInputPlugin::CharHook(const unsigned int code_point) {
+ void TextInputPlugin::KeyboardHook(bool released,
+                                    xkb_keysym_t keysym,
+                                    uint32_t /* xkb_scancode */,
+-                                   uint32_t /* modifiers */) {
++                                   uint32_t /* modifiers */,
++                                   const KeyboardHookMetadata& /* meta */) {
+   if (active_model_ == nullptr) {
+     return;
+   }
+diff --git a/shell/platform/homescreen/text_input_plugin.h b/shell/platform/homescreen/text_input_plugin.h
+index e025c2c7..a58986aa 100644
+--- a/shell/platform/homescreen/text_input_plugin.h
++++ b/shell/platform/homescreen/text_input_plugin.h
+@@ -31,7 +31,8 @@ class TextInputPlugin final : public KeyboardHookHandler {
+   void KeyboardHook(bool released,
+                     xkb_keysym_t keysym,
+                     uint32_t xkb_scancode,
+-                    uint32_t modifiers) override;
++                    uint32_t modifiers,
++                    const KeyboardHookMetadata& meta) override;
+ 
+   // |KeyboardHookHandler|
+   void CharHook(unsigned int code_point) override;
+diff --git a/shell/task_runner.cc b/shell/task_runner.cc
+index 0ed0617f..e2687075 100644
+--- a/shell/task_runner.cc
++++ b/shell/task_runner.cc
+@@ -40,6 +40,7 @@ TaskRunner::TaskRunner(std::string name, FlutterEngine& engine)
+ 
+   asio::post(*strand_, [&]() {
+     pthread_self_ = pthread_self();
++    platform_thread_ready_.store(true, std::memory_order_release);
+     spdlog::debug("{} Task Runner, thread_id=0x{:x}", name_, pthread_self_);
+   });
+ }
+@@ -104,3 +105,25 @@ std::future<FlutterEngineResult> TaskRunner::QueueUpdateLocales(
+ 
+   return future;
+ }
++
++std::future<FlutterEngineResult> TaskRunner::QueueSendKeyEvent(
++    FlutterKeyEvent event,
++    std::string character) const {
++  auto promise(std::make_unique<std::promise<FlutterEngineResult>>());
++  auto future(promise->get_future());
++
++  post(*strand_, [event, character = std::move(character),
++                  promise = std::move(promise), engine = engine_]() mutable {
++    FlutterKeyEvent queued_event = event;
++    if (!character.empty() &&
++        event.type != kFlutterKeyEventTypeUp) {
++      queued_event.character = character.c_str();
++    } else {
++      queued_event.character = nullptr;
++    }
++    promise->set_value(LibFlutterEngine->SendKeyEvent(engine, &queued_event,
++                                                      nullptr, nullptr));
++  });
++
++  return future;
++}
+diff --git a/shell/task_runner.h b/shell/task_runner.h
+index 28c8f44c..15c8c172 100644
+--- a/shell/task_runner.h
++++ b/shell/task_runner.h
+@@ -16,8 +16,10 @@
+ 
+ #pragma once
+ 
++#include <atomic>
+ #include <future>
+ #include <memory>
++#include <string>
+ 
+ #include "asio/executor_work_guard.hpp"
+ #include "asio/io_context.hpp"
+@@ -37,9 +39,12 @@ class TaskRunner {
+   static pthread_t GetThreadId() { return pthread_self(); };
+ 
+   [[nodiscard]] bool IsThreadEqual(const pthread_t threadid) const {
+-    return pthread_equal(threadid, pthread_self_) != 0;
++    return platform_thread_ready_.load(std::memory_order_acquire) &&
++           pthread_equal(threadid, pthread_self_) != 0;
+   };
+ 
++  [[nodiscard]] pthread_t GetPlatformThreadId() const { return pthread_self_; }
++
+   void QueueFlutterTask(size_t index,
+                         uint64_t target_time,
+                         FlutterTask task,
+@@ -53,6 +58,10 @@ class TaskRunner {
+   [[nodiscard]] std::future<FlutterEngineResult> QueueUpdateLocales(
+       std::vector<const FlutterLocale*> locales) const;
+ 
++  std::future<FlutterEngineResult> QueueSendKeyEvent(
++      FlutterKeyEvent event,
++      std::string character) const;
++
+   std::string GetName() { return name_; }
+ 
+   [[nodiscard]] asio::io_context::strand* GetStrandContext() const {
+@@ -63,7 +72,8 @@ class TaskRunner {
+   std::string name_;
+   FlutterEngine& engine_;
+   std::thread thread_;
+-  pthread_t pthread_self_;
++  std::atomic<bool> platform_thread_ready_{false};
++  pthread_t pthread_self_{};
+   std::unique_ptr<asio::io_context> io_context_;
+   asio::executor_work_guard<decltype(io_context_->get_executor())> work_;
+   std::unique_ptr<asio::io_context::strand> strand_;
+diff --git a/shell/view/flutter_view.cc b/shell/view/flutter_view.cc
+index 5a83ecc7..d8caf9f2 100644
+--- a/shell/view/flutter_view.cc
++++ b/shell/view/flutter_view.cc
+@@ -109,7 +109,8 @@ FlutterView::FlutterView(Configuration::Config config,
+   auto internal_plugin_messenger =
+       m_state->engine_state->internal_plugin_registrar->messenger();
+   m_state->keyboard_hook_handlers.push_back(
+-      std::make_unique<flutter::KeyEventHandler>(internal_plugin_messenger));
++      std::make_unique<flutter::KeyEventHandler>(internal_plugin_messenger,
++                                                 m_state.get()));
+   m_state->keyboard_hook_handlers.push_back(
+       std::make_unique<flutter::TextInputPlugin>(internal_plugin_messenger));
+   m_wayland_display->SetViewControllerState(
+diff --git a/shell/wayland/display.cc b/shell/wayland/display.cc
+index 139655ca..cb649b65 100644
+--- a/shell/wayland/display.cc
++++ b/shell/wayland/display.cc
+@@ -19,12 +19,14 @@
+ #include <sys/mman.h>
+ #include <unistd.h>
+ #include <xkbcommon/xkbcommon.h>
++#include <xkbcommon/xkbcommon-keysyms.h>
+ #include <algorithm>
+ #include <cerrno>
+ #include <cstring>
+ #include <utility>
+ 
+ #include "config/common.h"
++#include "shell/input/key_mapping.h"
+ 
+ #include "engine.h"
+ #include "timer.h"
+@@ -33,7 +35,8 @@ extern void KeyCallback(FlutterDesktopViewControllerState* view_state,
+                         bool released,
+                         xkb_keysym_t keysym,
+                         uint32_t xkb_scancode,
+-                        uint32_t modifiers);
++                        uint32_t modifiers,
++                        const flutter::KeyboardHookMetadata& meta);
+ 
+ Display::Display(const bool enable_cursor,
+                  const std::string& ignore_wayland_event,
+@@ -625,8 +628,21 @@ void Display::keyboard_handle_key(void* data,
+                                   uint32_t state) {
+   auto* d = static_cast<Display*>(data);
+ 
+-  if (!d->m_xkb_state)
++  // RDKShell returns -1 (0xffffffff) for unmapped keys; forwarding crashes XKB
++  // (scancode wraps to 0x7) and produces spurious Flutter events.
++  if (key == 0xffffffffu) {
++    spdlog::warn(
++        "[RDK_EMBEDDER_KEY_SKIP] evdev=0xffffffff (unmapped in RDKShell) — "
++        "check /etc/rcu_mapping.json and linuxkeys.cpp keyCodeToWayland()");
+     return;
++  }
++
++  if (!d->m_xkb_state) {
++    spdlog::warn(
++        "[RDK_EMBEDDER_KEY_RAW] xkb_state is NULL - key dropped! evdev={:#x}",
++        key);
++    return;
++  }
+ 
+   //
+   // Important: the scancode from this event is the Linux evdev scancode.
+@@ -645,7 +661,6 @@ void Display::keyboard_handle_key(void* data,
+         xkb_state_key_get_syms(d->m_xkb_state, xkb_scancode, &key_symbols);
+     if (res == 0) {
+       spdlog::debug("xkb_scancode has no key symbols: 0x{:x}", xkb_scancode);
+-      keysym = XKB_KEY_NoSymbol;
+     } else {
+       // only use the first symbol until the use case for two is clarified
+       keysym = key_symbols[0];
+@@ -655,13 +670,34 @@ void Display::keyboard_handle_key(void* data,
+     }
+   }
+ 
++  char utf8[8] = {0};
++  xkb_state_key_get_utf8(d->m_xkb_state, xkb_scancode, utf8, sizeof(utf8));
++  const uint32_t keysym_u = static_cast<uint32_t>(keysym);
++  const uint64_t derived_logical = homescreen::keys::DeriveLogicalKey(
++      key, utf8, keysym_u);
++  const uint64_t physical = homescreen::keys::EvdevToFlutterPhysical(
++      key, xkb_scancode, keysym_u);
++
++  const xkb_keysym_t forward_keysym = static_cast<xkb_keysym_t>(
++      homescreen::keys::ForwardKeysym(key, keysym_u, derived_logical));
++
++  flutter::KeyboardHookMetadata meta;
++  meta.evdev = key;
++  meta.logical = derived_logical;
++  meta.physical = physical;
++  meta.name = homescreen::keys::DisplayName(key, derived_logical);
++  meta.utf8 = (utf8[0] != '\0') ? utf8 : nullptr;
++
+   KeyCallback(d->m_view_controller_state,
+-              state == WL_KEYBOARD_KEY_STATE_RELEASED, keysym, xkb_scancode, 0);
++              state == WL_KEYBOARD_KEY_STATE_RELEASED, forward_keysym,
++              xkb_scancode, 0, meta);
+ 
+   if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+     if (xkb_keymap_key_repeats(d->m_keymap, xkb_scancode)) {
+       SPDLOG_DEBUG("xkb_keymap_key_repeats: 0x{:x}", xkb_scancode);
+-      d->m_keysym_pressed = keysym;
++      d->m_keysym_pressed = static_cast<xkb_keysym_t>(keysym_u);
++      meta.utf8 = nullptr;
++      d->m_repeat_meta = meta;
+       set_repeat_code(d, xkb_scancode);
+       d->m_repeat_timer->arm();
+     } else {
+@@ -709,8 +745,16 @@ const wl_keyboard_listener Display::keyboard_listener = {
+ void Display::keyboard_repeat_func(void* data) {
+   if (auto d = static_cast<Display*>(data);
+       XKB_KEY_NoSymbol != d->m_repeat_code) {
++    char repeat_utf8[8] = {0};
++    if (d->m_xkb_state) {
++      xkb_state_key_get_utf8(d->m_xkb_state, d->m_repeat_code, repeat_utf8,
++                             sizeof(repeat_utf8));
++    }
++    flutter::KeyboardHookMetadata repeat_meta = d->m_repeat_meta;
++    repeat_meta.is_repeat = true;
++    repeat_meta.utf8 = (repeat_utf8[0] != '\0') ? repeat_utf8 : nullptr;
+     KeyCallback(d->m_view_controller_state, false, d->m_keysym_pressed,
+-                d->m_repeat_code, 0);
++                d->m_repeat_code, 0, repeat_meta);
+   }
+ }
+ 
+diff --git a/shell/wayland/display.h b/shell/wayland/display.h
+index a897a0a8..2c734542 100644
+--- a/shell/wayland/display.h
++++ b/shell/wayland/display.h
+@@ -32,7 +32,6 @@
+ #include "config/common.h"
+ #include "configuration/configuration.h"
+ #include "platform/homescreen/flutter_desktop_view_controller_state.h"
+-#include "platform/homescreen/key_event_handler.h"
+ #include "platform/homescreen/keyboard_hook_handler.h"
+ #include "platform/homescreen/text_input_plugin.h"
+ #include "timer.h"
+@@ -494,6 +493,8 @@ class Display {
+ 
+   xkb_keysym_t m_keysym_pressed{};
+ 
++  flutter::KeyboardHookMetadata m_repeat_meta{};
++
+   std::mutex m_lock;
+   uint32_t m_repeat_code{};
+ 
