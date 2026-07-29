@@ -1,0 +1,18 @@
+{
+  "id": "com.rdkcentral.flutter.app.key-mapping-validator-debug",
+  "version": "0.1.0",
+  "versionName": "develop",
+  "name": "Key Mapping Validator",
+  "packageType": "application",
+  "entryPoint": "/usr/share/flutter/flutter-key-mapping-validator/current/debug/",
+  "dependencies": {
+    "com.rdkcentral.flutter.runtime.flutter-auto-debug": "0.0.1"
+  },
+  "permissions": [
+    "urn:rdk:permission:internet",
+    "urn:rdk:permission:firebolt",
+    "urn:rdk:permission:thunder",
+    "urn:rdk:permission:rialto"
+  ],
+  "configuration": {}
+}
