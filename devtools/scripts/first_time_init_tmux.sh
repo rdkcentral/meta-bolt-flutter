@@ -34,8 +34,13 @@ if [ -n "${INIT_CACHE_PATH}" ]; then
     export DOWNLOADS_PATH="${INIT_CACHE_PATH}/downloads"
 fi
 
-echo "first_time_init: running . setup-environment"
-if . setup-environment; then
+if [ -z "${FLUTTER_SERIES}" ]; then
+    echo "ERROR: FLUTTER_SERIES is not set. Start the container with --flutter-version."
+    exec bash
+fi
+
+echo "first_time_init: running . setup-environment ${FLUTTER_SERIES}"
+if . setup-environment "${FLUTTER_SERIES}"; then
     echo "first_time_init: setup-environment finished."
 else
     echo "ERROR: setup-environment failed with exit code $?"
