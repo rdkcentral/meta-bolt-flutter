@@ -19,7 +19,12 @@ Host *
     UserKnownHostsFile /dev/null
 EOF
 
-if ! . setup-environment; then
+if [ -z "${FLUTTER_SERIES}" ]; then
+    echo "ERROR: FLUTTER_SERIES is not set. Start the container with --flutter-version."
+    return 1 2>/dev/null || exit 1
+fi
+
+if ! . setup-environment "${FLUTTER_SERIES}"; then
     echo "ERROR: setup-environment failed."
     return 1 2>/dev/null || exit 1
 fi

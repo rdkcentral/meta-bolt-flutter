@@ -100,12 +100,12 @@ get_container_env() {
 }
 
 start_usage() {
-    echo "Usage: $0 start [--tag <tag>] --project-path <project-source-code-path> --bolt-name <bolt-name> --stb-ip <stb-ip> --application-recipe <application-bitbake-recipe> [--downloads-path <downloads-path>] [--sstate-path <sstate-path>]"
+    echo "Usage: $0 start --flutter-version <series> [--tag <tag>] --project-path <project-source-code-path> --bolt-name <bolt-name> --stb-ip <stb-ip> --application-recipe <application-bitbake-recipe> [--downloads-path <downloads-path>] [--sstate-path <sstate-path>]"
 }
 
 first_time_init_usage() {
-    echo "Usage: $0 first_time_init [--tag <tag>] [--use-build-volume] --downloads-path <downloads-path> --sstate-path <sstate-path>"
-    echo "   or: $0 first_time_init [--tag <tag>] [--use-build-volume] --init-cache-path <init-cache-path>"
+    echo "Usage: $0 first_time_init --flutter-version <series> [--tag <tag>] [--use-build-volume] --downloads-path <downloads-path> --sstate-path <sstate-path>"
+    echo "   or: $0 first_time_init --flutter-version <series> [--tag <tag>] [--use-build-volume] --init-cache-path <init-cache-path>"
 }
 
 require_first_time_init_value() {
@@ -117,6 +117,7 @@ require_first_time_init_value() {
 
 cmd_start() {
     local tag="latest"
+    local flutter_version=""
     local project_path=""
     local bolt_name=""
     local stb_ip=""
@@ -140,6 +141,9 @@ cmd_start() {
         case "$1" in
             --tag)
                 tag="$2"
+                ;;
+            --flutter-version)
+                flutter_version="$2"
                 ;;
             --project-path)
                 project_path="$2"
@@ -167,6 +171,12 @@ cmd_start() {
 
         shift 2
     done
+
+    if [ -z "$flutter_version" ]; then
+        echo "Error: --flutter-version is required."
+        start_usage
+        exit 1
+    fi
 
     if [ -z "$project_path" ] || [ -z "$bolt_name" ] || [ -z "$stb_ip" ] || [ -z "$application_recipe" ]; then
         start_usage
@@ -199,6 +209,8 @@ cmd_start() {
         docker_args+=( -e "BOLT_BUILD_VOLUME_NAME=${BUILD_VOLUME_NAME}" )
     fi
 
+    docker_args+=( -e "FLUTTER_SERIES=${flutter_version}" )
+
     # Remove a stopped container with the same generated name, if present.
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
 
@@ -228,6 +240,7 @@ cmd_start() {
 
 cmd_first_time_init() {
     local tag="latest"
+    local flutter_version=""
     local downloads_path=""
     local sstate_path=""
     local init_cache_path=""
@@ -253,6 +266,10 @@ cmd_first_time_init() {
                 require_first_time_init_value "$@"
                 tag="$2"
                 ;;
+            --flutter-version)
+                require_first_time_init_value "$@"
+                flutter_version="$2"
+                ;;
             --downloads-path)
                 require_first_time_init_value "$@"
                 downloads_path="$2"
@@ -273,6 +290,12 @@ cmd_first_time_init() {
 
         shift 2
     done
+
+    if [ -z "$flutter_version" ]; then
+        echo "Error: --flutter-version is required."
+        first_time_init_usage
+        exit 1
+    fi
 
     if [ -n "$init_cache_path" ] && { [ -n "$downloads_path" ] || [ -n "$sstate_path" ]; }; then
         echo "Error: Use either --downloads-path/--sstate-path or --init-cache-path, not both."
@@ -334,6 +357,8 @@ cmd_first_time_init() {
         docker_args+=( -v "${BUILD_VOLUME_NAME}:${REPO_ROOT}/build" )
         docker_args+=( -e "BOLT_BUILD_VOLUME_NAME=${BUILD_VOLUME_NAME}" )
     fi
+
+    docker_args+=( -e "FLUTTER_SERIES=${flutter_version}" )
 
     # Remove a stopped container with the same generated name, if present.
     docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1
@@ -499,9 +524,9 @@ case "$COMMAND" in
         ;;
     *)
         echo "Usage: $0 {first_time_init|start|push|debug|stop|bash|dockerbuild|make|makepush|ctrlc} [args...]"
-        echo "  first_time_init [--tag <tag>] [--use-build-volume] --downloads-path <downloads-path> --sstate-path <sstate-path>"
-        echo "  first_time_init [--tag <tag>] [--use-build-volume] --init-cache-path <init-cache-path>"
-        echo "  start [--tag <tag>] --project-path <project-source-code-path> --bolt-name <bolt-name> --stb-ip <stb-ip> --application-recipe <application-bitbake-recipe> [--downloads-path <downloads-path>] [--sstate-path <sstate-path>]"
+        echo "  first_time_init --flutter-version <series> [--tag <tag>] [--use-build-volume] --downloads-path <downloads-path> --sstate-path <sstate-path>"
+        echo "  first_time_init --flutter-version <series> [--tag <tag>] [--use-build-volume] --init-cache-path <init-cache-path>"
+        echo "  start --flutter-version <series> [--tag <tag>] --project-path <project-source-code-path> --bolt-name <bolt-name> --stb-ip <stb-ip> --application-recipe <application-bitbake-recipe> [--downloads-path <downloads-path>] [--sstate-path <sstate-path>]"
         exit 1
         ;;
 esac
