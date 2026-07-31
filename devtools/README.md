@@ -55,6 +55,7 @@ If you already have cache directories, pass both paths:
 ```bash
 cd "${REPO_ROOT}"
 devtools/flutter_bolt_dev_container.sh first_time_init \
+    --flutter-version "${FLUTTER_SERIES}" \
     --use-build-volume \
     --downloads-path "${OE_DOWNLOADS}" \
     --sstate-path "${OE_SSTATE_PATH}"
@@ -76,6 +77,7 @@ If you do not have prewarmed cache directories, let the script create them:
 ```bash
 cd "${REPO_ROOT}"
 devtools/flutter_bolt_dev_container.sh first_time_init \
+    --flutter-version "${FLUTTER_SERIES}" \
     --use-build-volume \
     --init-cache-path "${REPO_ROOT}/build/init-cache"
 ```
@@ -126,6 +128,7 @@ Use `start` when the first-time initialization has completed and you are ready t
 ```bash
 cd "${REPO_ROOT}"
 devtools/flutter_bolt_dev_container.sh start \
+    --flutter-version "${FLUTTER_SERIES}" \
     --project-path "${APP_DIR}" \
     --bolt-name "${BOLT_NAME}" \
     --stb-ip "${STB_IP}" \
@@ -136,6 +139,7 @@ devtools/flutter_bolt_dev_container.sh start \
 
 Required parameters:
 
+- `--flutter-version <series>`: Flutter SDK series to build against, e.g. `3.38`. Must match one of the supported series (`3.32`, `3.35`, `3.38`). Passed into the container as `FLUTTER_SERIES` and forwarded to `setup-environment`.
 - `--project-path <path>`: local path to the Flutter application source code. It is mounted into the container and configured as `EXTERNALSRC` for the app recipe.
 - `--bolt-name <name>`: Bolt package config name without the `.bolt.json` suffix, such as `flutter.app.wonderous-debug`.
 - `--stb-ip <ip>`: target STB IP address used by `push` and `debug`.
@@ -220,8 +224,8 @@ Typical use is to copy the template set, replace `myapp` with your recipe/applic
 `devtools/flutter_bolt_dev_container.sh` supports these commands:
 
 - `dockerbuild`: builds the local `flutter-bolt-dev` Docker image.
-- `first_time_init`: starts a setup container and performs the initial repo, BitBake, base image, and runtime Bolt setup. Requires either `--downloads-path` plus `--sstate-path`, or `--init-cache-path`; accepts `--use-build-volume` to put `${REPO_ROOT}/build` in a repo-specific Docker volume.
-- `start`: starts the app development container. Requires `--project-path`, `--bolt-name`, `--stb-ip`, and `--application-recipe`; accepts optional cache paths and Docker tag.
+- `first_time_init`: starts a setup container and performs the initial repo, BitBake, base image, and runtime Bolt setup. Requires `--flutter-version`; requires either `--downloads-path` plus `--sstate-path`, or `--init-cache-path`; accepts `--use-build-volume` to put `${REPO_ROOT}/build` in a repo-specific Docker volume.
+- `start`: starts the app development container. Requires `--flutter-version`, `--project-path`, `--bolt-name`, `--stb-ip`, and `--application-recipe`; accepts optional cache paths and Docker tag.
 - `bash`: attaches to the container's `tmux` session. Exiting the shell stops the session and then the container; detach with `Ctrl+B`, then `D` to keep it running.
 - `make`: runs `bolt make` for the configured Flutter Bolt package.
 - `push`: runs `bolt push root@${STB_IP}` for the built output package.
@@ -248,6 +252,7 @@ Each checkout path gets its own generated container name, so multiple checkouts 
 export REPO_ROOT=/path/to/meta-bolt-flutter
 export OE_DOWNLOADS=/path/to/downloads
 export OE_SSTATE_PATH=/path/to/sstate-cache
+export FLUTTER_SERIES=3.38
 ```
 
 2. Build the development container image:
@@ -263,6 +268,7 @@ devtools/flutter_bolt_dev_container.sh dockerbuild
 
 ```bash
 devtools/flutter_bolt_dev_container.sh first_time_init \
+    --flutter-version "${FLUTTER_SERIES}" \
     --downloads-path "${OE_DOWNLOADS}" \
     --sstate-path "${OE_SSTATE_PATH}"
 ```
@@ -271,6 +277,7 @@ devtools/flutter_bolt_dev_container.sh first_time_init \
 
 ```bash
 devtools/flutter_bolt_dev_container.sh first_time_init \
+    --flutter-version "${FLUTTER_SERIES}" \
     --init-cache-path "${REPO_ROOT}/build/init-cache"
 ```
 
@@ -312,6 +319,7 @@ export STB_IP=192.0.2.10
 export FLUTTER_APP=gskinnerteam-flutter-wonderous-app-wonders
 export OE_DOWNLOADS=/path/to/downloads
 export OE_SSTATE_PATH=/path/to/sstate-cache
+export FLUTTER_SERIES=3.38
 ```
 
 2. Start the development container:
@@ -319,6 +327,7 @@ export OE_SSTATE_PATH=/path/to/sstate-cache
 ```bash
 cd "${REPO_ROOT}"
 devtools/flutter_bolt_dev_container.sh start \
+    --flutter-version "${FLUTTER_SERIES}" \
     --project-path "${APP_DIR}" \
     --bolt-name "${BOLT_NAME}" \
     --stb-ip "${STB_IP}" \
