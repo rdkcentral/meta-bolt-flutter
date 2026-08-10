@@ -9,7 +9,7 @@ SECTION = "graphics"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=421eabdde8ad31134feff02518f91a30"
 
-SRCREV = "433dd293b4848727b6551d3e11e2cd827d53ca27"
+SRCREV = "a677be573be33846fb341f12f41bac28d954463b"
 SRC_URI = "git://github.com/krishnan-nair-infosys/key_mapping_validator.git;branch=main;protocol=https \
            file://config.toml \
 "
